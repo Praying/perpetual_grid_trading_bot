@@ -1,0 +1,48 @@
+{
+  "instrument_type": "perpetual",
+  "exchange": {
+    "name": "okx",
+    "trading_fee": 0.001, 
+    "trading_mode": "paper_trading"
+  },
+  "pair": {
+    "base_currency": "BNB",
+    "quote_currency": "USDT"
+  },
+  "trading_settings": {
+    "timeframe": "1m",
+    "period": {
+      "start_date": "2024-12-10T09:00:00Z",
+      "end_date": "2024-12-15T23:00:00Z"
+    },
+    "initial_balance": 150,
+    "leverage": 10,
+    "margin_mode": "crossed"
+  },
+  "grid_strategy": {
+    "type": "hedged_grid",
+    "spacing": "geometric",
+    "num_grids": 80,
+    "value": 7,
+    "ratio": 0.005,
+    "range": {
+      "top": 750,
+      "bottom": 600
+    },
+    "reversion_price": 720
+  },
+  "risk_management": {
+    "take_profit": {
+      "enabled": false,
+      "threshold": 3700
+    },
+    "stop_loss": {
+      "enabled": false,
+      "threshold": 2830
+    }
+  },
+  "logging": {
+    "log_level": "INFO",
+    "log_to_file": true
+  }
+}

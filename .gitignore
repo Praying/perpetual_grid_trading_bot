@@ -1,0 +1,41 @@
+# Byte-compiled / optimized / DLL files
+*.DS_Store
+__pycache__/
+*.pyc
+*.py[cod]
+
+# Distribution / packaging
+build/
+dist/
+*.egg-info/
+*.lock
+
+# Installer logs
+pip-log.txt
+pip-delete-this-directory.txt
+
+# Unit test / coverage reports
+.tox/
+.coverage
+.cache
+coverage.xml
+
+# Ignore profiling output files
+*.prof
+
+# VS Code
+.vscode/
+
+# Secrets
+secrets.json
+.env.yml
+.env
+loki-data/
+grafana-data/
+
+# `uv` Package Manager
+.uv/
+
+# Project specific
+/data/
+logs/*
