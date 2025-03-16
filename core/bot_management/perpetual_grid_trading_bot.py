@@ -113,15 +113,17 @@ class PerpetualGridTradingBot:
 
             # 创建永续合约订单管理器
             order_manager = PerpetualOrderManager(
-                self.exchange_service,
                 grid_manager,
+                order_validator,
+                self.balance_tracker,
+                order_book,
+                self.event_bus,
+                order_execution_strategy,
+                self.notification_handler,
                 self.trading_mode,
                 trading_pair,
-                order_execution_strategy,
-                order_book,
-                self.balance_tracker,
-                order_validator,
-                self.event_bus,
+                strategy_type,
+                self.exchange_service,
                 5.0,
             )
             

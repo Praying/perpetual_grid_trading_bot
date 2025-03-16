@@ -30,3 +30,7 @@ class OrderExecutionStrategyInterface(ABC):
         pair: str
     ) -> Optional[PerpetualOrder]:
         pass
+
+    @abstractmethod
+    async def get_funding_rate(self, pair: str) -> float:
+        pass

@@ -306,7 +306,7 @@ class PerpetualGridManager:
         
         elif self.strategy_type == StrategyType.HEDGED_GRID:
             # 买入网格为除顶部网格外的所有网格
-            self.sorted_buy_grids = self.price_grids[:-1]  # 除顶部网格外
+            self.sorted_buy_grids  = self.price_grids[:-1]  # 除顶部网格外
             # 卖出网格为除底部网格外的所有网格
             self.sorted_sell_grids = self.price_grids[1:]  # All except the bottom grid
             # 初始化网格级别状态，非顶部网格为 READY_TO_BUY_OR_SELL，顶部网格为 READY_TO_SELL
