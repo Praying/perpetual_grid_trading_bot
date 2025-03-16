@@ -78,13 +78,13 @@ class PerpetualOrderManager:
             # 验证并调整订单数量
             margin_balance = await self.balance_tracker.get_available_margin(symbol)
             
-            if side in [PerpetualOrderSide.OPEN_LONG, PerpetualOrderSide.OPEN_SHORT]:
+            if side in [PerpetualOrderSide.BUY_OPEN, PerpetualOrderSide.BUY_CLOSE]:
                 adjusted_quantity = self.order_validator.adjust_and_validate_open_long(
                     margin_balance=margin_balance,
                     order_quantity=quantity,
                     price=price,
                     leverage=self.leverage
-                ) if side == PerpetualOrderSide.OPEN_LONG else \
+                ) if side == PerpetualOrderSide.BUY_OPEN else \
                 self.order_validator.adjust_and_validate_open_short(
                     margin_balance=margin_balance,
                     order_quantity=quantity,
@@ -97,7 +97,7 @@ class PerpetualOrderManager:
                 adjusted_quantity = self.order_validator.adjust_and_validate_close_long(
                     long_position=position,
                     order_quantity=quantity
-                ) if side == PerpetualOrderSide.CLOSE_LONG else \
+                ) if side == PerpetualOrderSide.BUY_CLOSE else \
                 self.order_validator.adjust_and_validate_close_short(
                     short_position=position,
                     order_quantity=quantity
@@ -440,7 +440,8 @@ class PerpetualOrderManager:
 
     async def initialize_grid_orders(self, current_price: float):
         # 初始化买单（仅挂低于当前价的网格）
-        for price in self.grid_manager.sorted_buy_grids:
+        buy_order_nums = 0
+        for price in reversed(self.grid_manager.sorted_buy_grids):
             if price >= current_price:
                 self.logger.info(f"Skipping grid level at price: {price} for BUY order: Above current price.")
                 continue# 跳过高于当前价的网格
@@ -467,6 +468,11 @@ class PerpetualOrderManager:
                     self.grid_manager.mark_order_pending(grid_level, order)
                     # 记录订单到订单簿
                     self.order_book.add_order(order, grid_level)
+                    # 计算数量, 一次最多放置5个多单
+                    buy_order_nums += 1
+                    if buy_order_nums >= self.grid_manager.max_placed_orders:
+                        self.logger.info(f"Place buy order for {self.trading_pair} reach max limit {self.grid_manager.max_placed_orders}.")
+                        break
 
                 except OrderExecutionFailedError as e:
                     self.logger.error(f"Failed to initialize buy order at grid level {price} - {str(e)}", exc_info=True)
@@ -476,6 +482,7 @@ class PerpetualOrderManager:
                     self.logger.error(f"Unexpected error during buy order initialization at grid level {price}: {e}", exc_info=True)
                     #await self.notification_handler.async_send_notification(NotificationType.ERROR_OCCURRED, error_details=f"Error while placing initial buy order: {str(e)}")
 
+        buy_close_order_nums = 0
         for price in self.grid_manager.sorted_sell_grids:
             if price <= current_price:
                 self.logger.info(f"Skipping grid level at price: {price} for SELL order: Below or equal to current price.")
@@ -484,7 +491,7 @@ class PerpetualOrderManager:
             grid_level = self.grid_manager.grid_levels[price]
             # total_balance_value = self.balance_tracker.get_total_balance_value(current_price)
             # order_quantity = self.grid_manager.get_order_size_for_grid_level(total_balance_value, current_price)
-            if self.grid_manager.can_place_order(grid_level, PerpetualOrderSide.SELL_OPEN):
+            if self.grid_manager.can_place_order(grid_level, PerpetualOrderSide.BUY_CLOSE):
                 try:
                     # adjusted_sell_order_quantity = self.order_validator.adjust_and_validate_sell_quantity(
                     #     crypto_balance=self.balance_tracker.crypto_balance,
@@ -496,7 +503,7 @@ class PerpetualOrderManager:
                     self.logger.info(
                         f"Placing initial sell limit order at grid level {price} for {adjusted_sell_order_quantity} {self.trading_pair}.")
                     order = await self.order_execution_strategy.execute_limit_order(
-                        PerpetualOrderSide.SELL_OPEN,
+                        PerpetualOrderSide.BUY_CLOSE,
                         self.trading_pair,
                         adjusted_sell_order_quantity,
                         price
@@ -509,6 +516,11 @@ class PerpetualOrderManager:
                     #self.balance_tracker.reserve_funds_for_sell(adjusted_sell_order_quantity)
                     self.grid_manager.mark_order_pending(grid_level, order)
                     self.order_book.add_order(order, grid_level)
+
+                    buy_close_order_nums += 1
+                    if buy_close_order_nums >= self.grid_manager.max_placed_orders:
+                        self.logger.info(f"Place buy close order for {self.trading_pair} reach max limit {self.grid_manager.max_placed_orders}.")
+                        break
 
                 except OrderExecutionFailedError as e:
                     self.logger.error(f"Failed to initialize sell order at grid level {price} - {str(e)}", exc_info=True)

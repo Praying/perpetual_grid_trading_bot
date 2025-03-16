@@ -70,13 +70,14 @@ class PerpetualExchangeService(ExchangeInterface):
             self.logger.info(f"{self.symbol}最小交易价格精度: {market['precision']['price']}")
         positions = await self.get_position(self.symbol)
         # 判断positions长度是否为空
-        if len(positions) > 0:
-            self.logger.info(f"{self.symbol}仓位信息: {positions}")
-        else:
+        if not positions:
             self.logger.info(f"{self.symbol}仓位信息为空")
             await self.set_position_mode(self.symbol, False)
             await self.set_leverage(self.symbol, 10)
             await self.set_margin_type(self.symbol, 'cross', 10)
+        else:
+            if len(positions) > 0:
+                self.logger.info(f"{self.symbol}仓位信息: {positions}")
 
 
     def _get_env_variable(self, key: str) -> str:

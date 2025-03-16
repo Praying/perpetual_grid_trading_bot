@@ -6,9 +6,9 @@ import pandas as pd
 class PerpetualOrderSide(Enum):
     """永续合约订单方向"""
     BUY_OPEN = 'buy'  # 买入开多
-    SELL_CLOSE = 'sell'  # 卖出平多
+    SELL_CLOSE = 'buy'  # 卖出平多
     SELL_OPEN = 'sell'  # 卖出开空
-    BUY_CLOSE = 'buy'  # 买入平空
+    BUY_CLOSE = 'sell'  # 买入平空
 
 
 class PerpetualOrderType(Enum):

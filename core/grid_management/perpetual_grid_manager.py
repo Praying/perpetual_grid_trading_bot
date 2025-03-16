@@ -14,7 +14,8 @@ class PerpetualGridManager:
         config_manager: ConfigManager, 
         strategy_type: StrategyType,
         leverage: float = 1.0,  # 杠杆倍数
-        margin_type: str = "isolated"  # 保证金模式：isolated(逐仓) 或 cross(全仓)
+        margin_type: str = "cross",  # 保证金模式：isolated(逐仓) 或 cross(全仓)
+        max_placed_orders: int = 5   # 最大放置的订单数量，默认值为5，即同时挂5个买单和5个卖单，减少保证金，提高资金利用率
     ):
         self.config_manager = config_manager
         self.strategy_type = strategy_type
@@ -31,6 +32,7 @@ class PerpetualGridManager:
         self.sorted_buy_grids: List[float] = []
         self.sorted_sell_grids: List[float] = []
         self.grid_levels: dict[float, GridLevel] = {}
+        self.max_placed_orders: int = max_placed_orders
         self.initialize_grids_and_levels()
 
     def get_order_size_for_grid_level(
@@ -330,6 +332,7 @@ class PerpetualGridManager:
 
     def get_reversion_price(self) -> float:
         return self.reversion_price
+
     def can_place_order(
         self,
         grid_level: GridLevel,
