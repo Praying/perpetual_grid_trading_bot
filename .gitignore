@@ -4,6 +4,8 @@ __pycache__/
 *.pyc
 *.py[cod]
 
+.idea
+
 # Distribution / packaging
 build/
 dist/

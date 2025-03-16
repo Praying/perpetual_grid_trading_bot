@@ -22,7 +22,5 @@ class ExchangeServiceFactory:
                 return PerpetualExchangeService(config_manager, is_paper_trading_activated=False)
             else:
                 return LiveExchangeService(config_manager, is_paper_trading_activated=False)
-        elif trading_mode == TradingMode.PERPETUAL_LIVE:
-            return PerpetualExchangeService(config_manager, is_paper_trading_activated=False)
         else:
             raise ValueError(f"Unsupported trading mode: {trading_mode}")

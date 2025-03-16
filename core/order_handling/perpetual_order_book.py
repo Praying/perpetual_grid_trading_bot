@@ -65,11 +65,11 @@ class PerpetualOrderBook:
         返回值:
             符合指定方向的订单列表
         """
-        if side == PerpetualOrderSide.OPEN_LONG:
+        if side == PerpetualOrderSide.BUY_OPEN:
             return self.long_orders['open']
-        elif side == PerpetualOrderSide.CLOSE_LONG:
+        elif side == PerpetualOrderSide.BUY_CLOSE:
             return self.long_orders['close']
-        elif side == PerpetualOrderSide.OPEN_SHORT:
+        elif side == PerpetualOrderSide.SELL_OPEN:
             return self.short_orders['open']
         else:  # CLOSE_SHORT
             return self.short_orders['close']

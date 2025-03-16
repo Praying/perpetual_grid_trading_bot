@@ -35,6 +35,115 @@ class PerpetualGridManager:
         self.max_placed_orders: int = max_placed_orders
         self.initialize_grids_and_levels()
 
+
+    def pair_grid_levels(
+            self,
+            source_grid_level: GridLevel,
+            target_grid_level: GridLevel,
+            pairing_type: str
+    ) -> None:
+        """
+        动态配对网格级别以进行买入或卖出。
+
+        参数:
+            source_grid_level: 发起配对的网格级别。
+            target_grid_level: 被配对的网格级别。
+            pairing_type: "buy" 或 "sell"，指定配对类型。
+            """
+        if pairing_type == "buy":
+            # 将源网格级别的买入配对设置为目标网格级别
+            source_grid_level.paired_buy_level = target_grid_level
+            # 将目标网格级别的卖出配对设置为源网格级别
+            target_grid_level.paired_sell_level = source_grid_level
+            self.logger.info(
+                f"Paired sell grid level {source_grid_level.price} with buy grid level {target_grid_level.price}.")
+
+        elif pairing_type == "sell":
+            # 将源网格级别的卖出配对设置为目标网格级别
+            source_grid_level.paired_sell_level = target_grid_level
+            # 将目标网格级别的买入配对设置为源网格级别
+            target_grid_level.paired_buy_level = source_grid_level
+            self.logger.info(
+                f"Paired buy grid level {source_grid_level.price} with sell grid level {target_grid_level.price}.")
+
+        else:
+            raise ValueError(f"Invalid pairing type: {pairing_type}. Must be 'buy' or 'sell'.")
+
+    def get_paired_sell_level(
+            self,
+            buy_grid_level: GridLevel
+    ) -> Optional[GridLevel]:
+        """
+        根据策略类型为给定的买入网格级别确定配对的卖出网格级别。
+
+        参数:
+            buy_grid_level: 需要配对卖出级别的买入网格级别。
+
+        返回:
+            配对的卖出网格级别，如果不存在则返回 None。
+        """
+        if self.strategy_type == StrategyType.SIMPLE_GRID:
+            self.logger.info(f"Looking for paired sell level for buy level at {buy_grid_level}")
+            self.logger.info(f"Available sell grids: {self.sorted_sell_grids}")
+
+            for sell_price in self.sorted_sell_grids:
+                sell_level = self.grid_levels[sell_price]
+                self.logger.info(f"Checking sell level {sell_price}, state: {sell_level.state}")
+
+                if sell_level and not self.can_place_order(sell_level, PerpetualOrderSide.BUY_CLOSE):
+                    self.logger.info(
+                        f"Skipping sell level {sell_price} - cannot place order. State: {sell_level.state}")
+                    continue
+
+                if sell_price > buy_grid_level.price:
+                    self.logger.info(f"Paired sell level found at {sell_price} for buy level {buy_grid_level}.")
+                    return sell_level
+
+            self.logger.warning(f"No suitable sell level found above {buy_grid_level}")
+            return None
+
+        elif self.strategy_type == StrategyType.HEDGED_GRID:
+            self.logger.info(f"Available price grids: {self.price_grids}")
+            sorted_prices = sorted(self.price_grids)
+            current_index = sorted_prices.index(buy_grid_level.price)
+            self.logger.info(f"Current index of buy level {buy_grid_level.price}: {current_index}")
+
+            if current_index + 1 < len(sorted_prices):
+                paired_sell_price = sorted_prices[current_index + 1]
+                sell_level = self.grid_levels[paired_sell_price]
+                self.logger.info(
+                    f"Paired sell level for buy level {buy_grid_level.price} is at {paired_sell_price} (state: {sell_level.state})")
+                return sell_level
+
+            self.logger.warning(f"No suitable sell level found for buy grid level {buy_grid_level}")
+            return None
+
+        else:
+            self.logger.error(f"Unsupported strategy type: {self.strategy_type}")
+            return None
+
+    def get_grid_level_below(self, grid_level: GridLevel) -> Optional[GridLevel]:
+        """
+        返回给定网格级别正下方的网格级别。
+
+        参数:
+            grid_level: 当前网格级别。
+
+        返回:
+            下方的网格级别，如果不存在则返回 None。
+        """
+        # 对网格价格进行排序
+        sorted_levels = sorted(self.grid_levels.keys())
+        # 获取当前网格级别的索引
+        current_index = sorted_levels.index(grid_level.price)
+
+        if current_index > 0:
+            # 返回下方网格级别的价格
+            lower_price = sorted_levels[current_index - 1]
+            return self.grid_levels[lower_price]
+        return None
+
+
     def get_order_size_for_grid_level(
         self,
         total_margin: float,  # 总可用保证金
@@ -280,7 +389,6 @@ class PerpetualGridManager:
         self,
         grid_level: GridLevel,
         order_side: PerpetualOrderSide,
-        position_side: str
     ) -> None:
         """
         重写父类方法，处理合约订单完成后的状态转换
@@ -292,33 +400,25 @@ class PerpetualGridManager:
         """
         if self.strategy_type == StrategyType.SIMPLE_GRID:
             if order_side == PerpetualOrderSide.BUY_OPEN:  # 开多或平空
-                if position_side == "long":
-                    grid_level.state = GridCycleState.READY_TO_SELL
-                    self.logger.info(f"开多仓完成，网格级别 {grid_level.price} 转换为 READY_TO_SELL")
-                else:
-                    grid_level.state = GridCycleState.READY_TO_BUY
-                    self.logger.info(f"平空仓完成，网格级别 {grid_level.price} 转换为 READY_TO_BUY")
-            
-            elif order_side == PerpetualOrderSide.SELL_OPEN:  # 开空或平多
-                if position_side == "short":
-                    grid_level.state = GridCycleState.READY_TO_BUY
-                    self.logger.info(f"开空仓完成，网格级别 {grid_level.price} 转换为 READY_TO_BUY")
-                else:
-                    grid_level.state = GridCycleState.READY_TO_SELL
-                    self.logger.info(f"平多仓完成，网格级别 {grid_level.price} 转换为 READY_TO_SELL")
+                grid_level.state = GridCycleState.READY_TO_SELL
+                self.logger.info(f"开多仓完成，网格级别 {grid_level.price} 转换为 READY_TO_SELL")
+            else:
+                grid_level.state = GridCycleState.READY_TO_BUY
+                self.logger.info(f"平多仓完成，网格级别 {grid_level.price} 转换为 READY_TO_BUY")
+
 
         elif self.strategy_type == StrategyType.HEDGED_GRID:
             if order_side == PerpetualOrderSide.BUY_OPEN:
-                grid_level.state = GridCycleState.READY_TO_BUY_OR_SELL
-                self.logger.info(f"合约订单完成，网格级别 {grid_level.price} 转换为 READY_TO_BUY_OR_SELL")
+                grid_level.state = GridCycleState.READY_TO_SELL
+                self.logger.info(f"合约订单完成，网格级别 {grid_level.price} 转换为 READY_TO_SELL")
 
                 if grid_level.paired_sell_level:
                     grid_level.paired_sell_level.state = GridCycleState.READY_TO_SELL
                     self.logger.info(f"配对的卖出网格级别 {grid_level.paired_sell_level.price} 转换为 READY_TO_SELL")
 
-            elif order_side == PerpetualOrderSide.SELL_OPEN:
-                grid_level.state = GridCycleState.READY_TO_BUY_OR_SELL
-                self.logger.info(f"合约订单完成，网格级别 {grid_level.price} 转换为 READY_TO_BUY_OR_SELL")
+            elif order_side == PerpetualOrderSide.BUY_CLOSE:
+                grid_level.state = GridCycleState.READY_TO_BUY
+                self.logger.info(f"合约订单完成，网格级别 {grid_level.price} 转换为 READY_TO_BUY")
 
                 if grid_level.paired_buy_level:
                     grid_level.paired_buy_level.state = GridCycleState.READY_TO_BUY
@@ -348,7 +448,22 @@ class PerpetualGridManager:
         返回:
             bool: 如果可以放置订单则为 True，否则为 False。
         """
-        return True
+        if self.strategy_type == StrategyType.SIMPLE_GRID:
+            # 对于 SIMPLE_GRID 策略，买入订单要求状态为 READY_TO_BUY
+            if order_side == PerpetualOrderSide.BUY_OPEN:
+                return grid_level.state == GridCycleState.READY_TO_BUY
+            elif order_side == PerpetualOrderSide.BUY_CLOSE:
+                # 对于 SIMPLE_GRID 策略，卖出订单要求状态为 READY_TO_SELL
+                return grid_level.state == GridCycleState.READY_TO_SELL
+        elif self.strategy_type == StrategyType.HEDGED_GRID:
+            if order_side == PerpetualOrderSide.BUY_OPEN:
+                # 对于 HEDGED_GRID 策略，买入订单要求状态为 READY_TO_BUY 或 READY_TO_BUY_OR_SELL
+                return grid_level.state in {GridCycleState.READY_TO_BUY, GridCycleState.READY_TO_BUY_OR_SELL}
+            elif order_side == PerpetualOrderSide.BUY_CLOSE:
+                # 对于 HEDGED_GRID 策略，卖出订单要求状态为 READY_TO_SELL 或 READY_TO_BUY_OR_SELL
+                return grid_level.state in {GridCycleState.READY_TO_SELL, GridCycleState.READY_TO_BUY_OR_SELL}
+        else:
+            return False
 
     def mark_order_pending(
         self,
