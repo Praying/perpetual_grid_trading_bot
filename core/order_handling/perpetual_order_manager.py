@@ -155,6 +155,7 @@ class PerpetualOrderManager:
         else:
             self.logger.warning(
                 f"No valid sell grid level found for buy grid level {grid_level}. Skipping sell order placement.")
+        # TODO 此时卖单多了一个，买单少了一个，需要取消最上方的卖单，增加最下方的买单
 
     async def _place_sell_order(
             self,
@@ -230,6 +231,8 @@ class PerpetualOrderManager:
             await self._place_buy_order(grid_level, paired_buy_level, order.filled)
         else:
             self.logger.error(f"Failed to find or create a paired buy grid level for grid level {grid_level}.")
+
+        # TODO 此时买单多了一个，卖单少了一个，需要取消最下方的买单，增加最上方的卖单
 
     def _get_or_create_paired_buy_level(self, sell_grid_level: GridLevel) -> Optional[GridLevel]:
         """
