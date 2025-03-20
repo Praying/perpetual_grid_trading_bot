@@ -143,6 +143,47 @@ class PerpetualGridManager:
             return self.grid_levels[lower_price]
         return None
 
+    def get_grid_level_below_bound(self, grid_level: GridLevel) -> Optional[GridLevel]:
+        """
+        返回给定网格级别正下方距离为max_placed_orders的网格级别。
+
+        参数:
+            grid_level: 当前网格级别。
+
+        返回:
+            下方的网格级别，如果不存在则返回 None。
+        """
+        # 对网格价格进行排序
+        sorted_levels = sorted(self.grid_levels.keys())
+        # 获取当前网格级别的索引
+        current_index = sorted_levels.index(grid_level.price)
+
+        if current_index > 0 and current_index >= self.max_placed_orders:
+            # 返回下方网格距离为max_placed_orders级别的价格
+            lower_price = sorted_levels[current_index - self.max_placed_orders]
+            return self.grid_levels[lower_price]
+        return None
+
+    def get_grid_level_up_bound(self, grid_level: GridLevel) -> Optional[GridLevel]:
+        """
+        返回给定网格级别上方距离为max_placed_orders的网格级别。
+
+        参数:
+            grid_level: 当前网格级别。
+
+        返回:
+            下方的网格级别，如果不存在则返回 None。
+        """
+        # 对网格价格进行排序
+        sorted_levels = sorted(self.grid_levels.keys())
+        # 获取当前网格级别的索引
+        current_index = sorted_levels.index(grid_level.price)
+
+        if current_index < len(sorted_levels)  and current_index + self.max_placed_orders < len(sorted_levels):
+            # 返回下方网格距离为max_placed_orders级别的价格
+            upper_price = sorted_levels[current_index + self.max_placed_orders]
+            return self.grid_levels[upper_price]
+        return None
 
     def get_order_size_for_grid_level(
         self,
