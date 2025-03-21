@@ -254,3 +254,6 @@ class PerpetualLiveOrderExecutionStrategy(OrderExecutionStrategyInterface):
 
     async def get_funding_rate(self, pair: str)->float:
         return await self.exchange_service.get_funding_rate(pair)
+
+    async def cancel_order(self, order: PerpetualOrder):
+        await self._retry_cancel_order(order.identifier, order.symbol)
