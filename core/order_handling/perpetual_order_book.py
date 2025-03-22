@@ -20,7 +20,7 @@ class PerpetualOrderBook:
         self.conditional_orders: List[PerpetualOrder] = []
         
         # 网格订单映射关系
-        self.order_to_grid_map: Dict[PerpetualOrder, GridLevel] = {}
+        self.order_to_grid_map: Dict[str, GridLevel] = {}
         
         # 未关联网格的独立订单（如止盈/止损单）
         self.non_grid_orders: List[PerpetualOrder] = []
@@ -53,7 +53,7 @@ class PerpetualOrderBook:
         
         # 处理网格关联逻辑
         if grid_level:
-            self.order_to_grid_map[order] = grid_level
+            self.order_to_grid_map[order.identifier] = grid_level
         else:
             self.non_grid_orders.append(order)
     
@@ -87,7 +87,7 @@ class PerpetualOrderBook:
             订单和对应网格层级的元组列表
         """
         orders = self.get_orders_by_side(side)
-        return [(order, self.order_to_grid_map.get(order)) for order in orders]
+        return [(order, self.order_to_grid_map.get(order.identifier)) for order in orders]
     
     def get_open_orders(self) -> List[PerpetualOrder]:
         """获取所有未成交订单（包括所有方向）"""
@@ -111,7 +111,7 @@ class PerpetualOrderBook:
     
     def get_grid_level_for_order(self, order: PerpetualOrder) -> Optional[GridLevel]:
         """查询订单对应的网格层级（返回None表示非网格订单）"""
-        return self.order_to_grid_map.get(order)
+        return self.order_to_grid_map.get(order.identifier)
     
     def update_order_status(
         self,
@@ -148,8 +148,8 @@ class PerpetualOrderBook:
 
     def get_buy_orders_with_grid(self) -> List[Tuple[PerpetualOrder, Optional[GridLevel]]]:
         """获取带网格信息的买单列表（返回格式：订单对象 + 关联的网格层级）"""
-        return [(order, self.order_to_grid_map.get(order, None)) for order in self.long_orders['open']]
+        return [(order, self.order_to_grid_map.get(order.identifier, None)) for order in self.long_orders['open']]
 
     def get_sell_orders_with_grid(self) -> List[Tuple[PerpetualOrder, Optional[GridLevel]]]:
         """获取带网格信息的卖单列表（返回格式：订单对象 + 关联的网格层级）"""
-        return [(order, self.order_to_grid_map.get(order, None)) for order in self.long_orders['close']]
+        return [(order, self.order_to_grid_map.get(order.identifier, None)) for order in self.long_orders['close']]
