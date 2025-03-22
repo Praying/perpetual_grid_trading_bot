@@ -24,12 +24,12 @@ class LiveOrderExecutionStrategy(OrderExecutionStrategyInterface):
         self, 
         order_side: PerpetualOrderSide, 
         pair: str, 
-        quantity: float, 
+        amount: float,
         price: float
     ) -> Optional[PerpetualOrder]:
         for attempt in range(self.max_retries):
             try:
-                raw_order = await self.exchange_service.place_order(pair, PerpetualOrderType.MARKET.value.lower(), order_side.name.lower(), quantity, price)
+                raw_order = await self.exchange_service.place_order(pair, PerpetualOrderType.MARKET.value.lower(), order_side.name.lower(), amount, price)
                 order_result = await self._parse_order_result(raw_order)
                 
                 if order_result.status == PerpetualOrderStatus.CLOSED:
@@ -46,27 +46,27 @@ class LiveOrderExecutionStrategy(OrderExecutionStrategyInterface):
                 self.logger.error(f"Attempt {attempt + 1} failed with error: {str(e)}")
                 await asyncio.sleep(self.retry_delay)
 
-        raise OrderExecutionFailedError("Failed to execute Market order after maximum retries.", order_side, PerpetualOrderType.MARKET, pair, quantity, price)
+        raise OrderExecutionFailedError("Failed to execute Market order after maximum retries.", order_side, PerpetualOrderType.MARKET, pair, amount, price)
     
     async def execute_limit_order(
         self, 
         order_side: PerpetualOrderSide, 
         pair: str, 
-        quantity: float, 
+        amount: float,
         price: float
     ) -> Optional[PerpetualOrder]:
         try:
-            raw_order = await self.exchange_service.place_order(pair, PerpetualOrderType.LIMIT.value.lower(), order_side.name.lower(), quantity, price)
+            raw_order = await self.exchange_service.place_order(pair, PerpetualOrderType.LIMIT.value.lower(), order_side.name.lower(), amount, price)
             order_result = await self._parse_order_result(raw_order)
             return order_result
         
         except DataFetchError as e:
             self.logger.error(f"DataFetchError during order execution for {pair} - {e}")
-            raise OrderExecutionFailedError(f"Failed to execute Limit order on {pair}: {e}", order_side, PerpetualOrderType.LIMIT, pair, quantity, price)
+            raise OrderExecutionFailedError(f"Failed to execute Limit order on {pair}: {e}", order_side, PerpetualOrderType.LIMIT, pair, amount, price)
 
         except Exception as e:
             self.logger.error(f"Unexpected error in execute_limit_order: {e}")
-            raise OrderExecutionFailedError(f"Unexpected error during order execution: {e}", order_side, PerpetualOrderType.LIMIT, pair, quantity, price)
+            raise OrderExecutionFailedError(f"Unexpected error during order execution: {e}", order_side, PerpetualOrderType.LIMIT, pair, amount, price)
 
     async def get_order(
         self, 

@@ -202,7 +202,8 @@ class PerpetualExchangeService(ExchangeInterface):
         price: Optional[float] = None,
     ) -> Dict[str, Union[str, float]]:
         try:
-            order = await self.exchange.create_order(pair, order_type, order_side, amount, price)
+            correct_amount = self.exchange.amount_to_precision(pair, amount)
+            order = await self.exchange.create_order(pair, order_type, order_side, correct_amount, price)
             return order
 
         except NetworkError as e:

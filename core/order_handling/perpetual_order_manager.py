@@ -151,7 +151,7 @@ class PerpetualOrderManager:
 
         if paired_sell_level and self.grid_manager.can_place_order(paired_sell_level, PerpetualOrderSide.BUY_CLOSE):
             # 挂对冲卖单
-            await self._place_sell_order(grid_level, paired_sell_level, order.filled)
+            await self._place_sell_order(grid_level, paired_sell_level, 0.1)
         else:
             self.logger.warning(
                 f"No valid sell grid level found for buy grid level {grid_level}. Skipping sell order placement.")
@@ -161,7 +161,7 @@ class PerpetualOrderManager:
             await self._cancel_grid_orders(up_grid_level)
         blow_grid_level = self.grid_manager.get_grid_level_below_bound(grid_level)
         if blow_grid_level:
-            await self._place_simple_buy_order(blow_grid_level, order.filled)
+            await self._place_simple_buy_order(blow_grid_level, 1.0)
 
     async def _cancel_grid_orders(self, grid_level: GridLevel):
         for order in grid_level.orders:
@@ -169,12 +169,12 @@ class PerpetualOrderManager:
     async def _place_simple_buy_order(
             self,
             grid_level: GridLevel,
-            quantity: float
+            amount: float # 这里amount对应的应该是合约的张数，不是币的数量,每张合约的数量是0.01
     ) -> None:
         buy_order = await self.order_execution_strategy.execute_limit_order(
             PerpetualOrderSide.BUY_OPEN,
             self.trading_pair,
-            quantity,
+            amount,
             grid_level.price
         )
 
@@ -188,12 +188,12 @@ class PerpetualOrderManager:
     async def _place_simple_sell_order(
             self,
             grid_level: GridLevel,
-            quantity: float
+            amount: float
     ) -> None:
         sell_order = await self.order_execution_strategy.execute_limit_order(
             PerpetualOrderSide.BUY_CLOSE,
             self.trading_pair,
-            quantity,
+            amount,
             grid_level.price
         )
 
@@ -220,7 +220,7 @@ class PerpetualOrderManager:
         """
         # 数量验证与调整
         # adjusted_quantity = self.order_validator.adjust_and_validate_sell_quantity(self.balance_tracker.crypto_balance, quantity)
-        adjusted_quantity = 0.1
+        adjusted_quantity = 1.0
         # 执行限价卖单
         sell_order = await self.order_execution_strategy.execute_limit_order(
             PerpetualOrderSide.BUY_CLOSE,
@@ -281,7 +281,7 @@ class PerpetualOrderManager:
         """
         # 数量验证与调整
         # adjusted_quantity = self.order_validator.adjust_and_validate_sell_quantity(self.balance_tracker.crypto_balance, quantity)
-        adjusted_quantity = 0.1
+        adjusted_quantity = 1.0
         # 执行限价卖单
         buy_order = await self.order_execution_strategy.execute_limit_order(
             PerpetualOrderSide.BUY_OPEN,
@@ -310,7 +310,7 @@ class PerpetualOrderManager:
         self.grid_manager.complete_order(grid_level, PerpetualOrderSide.BUY_CLOSE)
         paired_buy_level = self._get_or_create_paired_buy_level(grid_level)
         if paired_buy_level:
-            await self._place_buy_order(grid_level, paired_buy_level, order.filled)
+            await self._place_buy_order(grid_level, paired_buy_level, 0.1)
         else:
             self.logger.error(f"Failed to find or create a paired buy grid level for grid level {grid_level}.")
 
@@ -320,7 +320,7 @@ class PerpetualOrderManager:
             await self._cancel_grid_orders(blow_grid_level)
         up_grid_level = self.grid_manager.get_grid_level_up_bound(grid_level)
         if up_grid_level:
-            await self._place_simple_sell_order(up_grid_level,order.filled)
+            await self._place_simple_sell_order(up_grid_level, 1.0)
 
 
     async def perform_initial_purchase(self, current_price: float) -> None:

@@ -38,7 +38,7 @@ class PerpetualLiveOrderExecutionStrategy(OrderExecutionStrategyInterface):
         self, 
         order_side: PerpetualOrderSide,
         pair: str, 
-        quantity: float, 
+        amount: float,
         price: float,
         position_side: Optional[PositionSide] = None
     ) -> Optional[PerpetualOrder]:
@@ -48,7 +48,7 @@ class PerpetualLiveOrderExecutionStrategy(OrderExecutionStrategyInterface):
                     pair,
                     PerpetualOrderType.MARKET.value.lower(),
                     order_side.value.lower(),
-                    quantity, 
+                    amount,
                     price,
                 )
                 # 等待订单完成并获取成交信息
@@ -63,14 +63,14 @@ class PerpetualLiveOrderExecutionStrategy(OrderExecutionStrategyInterface):
                 self.logger.error(f"Attempt {attempt + 1} failed with error: {str(e)}")
                 await asyncio.sleep(self.retry_delay)
 
-        raise OrderExecutionFailedError("Failed to execute Perpetual Market order after maximum retries.", 
-                                      order_side, PerpetualOrderType.MARKET, pair, quantity, price)
+        raise OrderExecutionFailedError("Failed to execute Perpetual Market order after maximum retries.",
+                                        order_side, PerpetualOrderType.MARKET, pair, amount, price)
     
     async def execute_limit_order(
         self, 
         order_side: PerpetualOrderSide,
         pair: str, 
-        quantity: float, 
+        amount: float,
         price: float,
         position_side: Optional[PositionSide] = None
     ) -> Optional[PerpetualOrder]:
@@ -79,7 +79,7 @@ class PerpetualLiveOrderExecutionStrategy(OrderExecutionStrategyInterface):
                 pair, 
                 PerpetualOrderType.LIMIT.value.lower(),
                 order_side.value.lower(),
-                quantity, 
+                amount,
                 price,
             )
             
@@ -88,13 +88,13 @@ class PerpetualLiveOrderExecutionStrategy(OrderExecutionStrategyInterface):
         
         except DataFetchError as e:
             self.logger.error(f"DataFetchError during perpetual order execution for {pair} - {e}")
-            raise OrderExecutionFailedError(f"Failed to execute Perpetual Limit order on {pair}: {e}", 
-                                          order_side, PerpetualOrderType.LIMIT, pair, quantity, price)
+            raise OrderExecutionFailedError(f"Failed to execute Perpetual Limit order on {pair}: {e}",
+                                            order_side, PerpetualOrderType.LIMIT, pair, amount, price)
 
         except Exception as e:
             self.logger.error(f"Unexpected error in execute_limit_order: {e}")
-            raise OrderExecutionFailedError(f"Unexpected error during perpetual order execution: {e}", 
-                                          order_side, PerpetualOrderType.LIMIT, pair, quantity, price)
+            raise OrderExecutionFailedError(f"Unexpected error during perpetual order execution: {e}",
+                                            order_side, PerpetualOrderType.LIMIT, pair, amount, price)
 
     async def get_order(
         self, 

@@ -8,7 +8,7 @@ class OrderExecutionStrategyInterface(ABC):
         self, 
         order_side: PerpetualOrderSide,
         pair: str, 
-        quantity: float,
+        amount: float,
         price: float
     ) -> Optional[PerpetualOrder]:
         pass
@@ -18,7 +18,7 @@ class OrderExecutionStrategyInterface(ABC):
         self, 
         order_side: PerpetualOrderSide,
         pair: str, 
-        quantity: float, 
+        amount: float,
         price: float
     ) -> Optional[PerpetualOrder]:
         pass

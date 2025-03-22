@@ -138,8 +138,8 @@ class PerpetualOrderStatusTracker:
             elif remote_order.status == PerpetualOrderStatus.OPEN:
                 if remote_order.filled > 0:
                     self.logger.info(f"Order {remote_order} partially filled. Filled: {remote_order.filled}, Remaining: {remote_order.remaining}.")
-                else:
-                    self.logger.info(f"Order {remote_order} is still open. No fills yet.")
+                # else:
+                #     self.logger.info(f"Order {remote_order} is still open. No fills yet.")
             else:
                 self.logger.warning(f"Unhandled order status '{remote_order.status}' for order {remote_order.identifier}.")
 

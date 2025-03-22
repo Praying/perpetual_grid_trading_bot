@@ -8,7 +8,7 @@ class BacktestOrderExecutionStrategy(OrderExecutionStrategyInterface):
         self, 
         order_side: PerpetualOrderSide,
         pair: str, 
-        quantity: float,
+        amount: float,
         price: float
     ) -> Optional[PerpetualOrder]:
         order_id = f"backtest-{int(time.time())}"
@@ -20,8 +20,8 @@ class BacktestOrderExecutionStrategy(OrderExecutionStrategyInterface):
             side=order_side,
             price=price,
             average=price,
-            amount=quantity,
-            filled=quantity,
+            amount=amount,
+            filled=amount,
             remaining=0,
             timestamp=timestamp,
             datetime="111",
@@ -34,7 +34,7 @@ class BacktestOrderExecutionStrategy(OrderExecutionStrategyInterface):
         self, 
         order_side: PerpetualOrderSide,
         pair: str, 
-        quantity: float, 
+        amount: float,
         price: float
     ) -> Optional[PerpetualOrder]:
         order_id = f"backtest-{int(time.time())}"
@@ -45,9 +45,9 @@ class BacktestOrderExecutionStrategy(OrderExecutionStrategyInterface):
             side=order_side,
             price=price,
             average=price,
-            amount=quantity,
+            amount=amount,
             filled=0,
-            remaining=quantity,
+            remaining=amount,
             timestamp=0,
             datetime="",
             last_trade_timestamp=1,

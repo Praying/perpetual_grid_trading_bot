@@ -24,12 +24,12 @@
     "spacing": "geometric",
     "num_grids": 80,
     "value": 7,
-    "ratio": 0.005,
+    "ratio": 0.002,
     "range": {
-      "top": 750,
+      "top": 720,
       "bottom": 600
     },
-    "reversion_price": 720
+    "reversion_price": 700
   },
   "risk_management": {
     "take_profit": {
