@@ -108,6 +108,15 @@ class PerpetualOrderManager:
         Args:
             order: The cancelled Order instance.
         """
+        ## 获取对应的GridLevel
+        grid_level = self.order_book.get_grid_level_for_order(order)
+        if not grid_level:
+            self.logger.warning(
+                f"Could not handle Order cancellation - No grid level found for the given cancelled order {order}")
+            return
+        grid_level.remove_order(order.identifier)
+        self.order_book.remove_order(order.identifier)
+        #await self.grid_manager.reset_grid(grid_level)
         ## TODO: place new limit Order
         await self.notification_handler.async_send_notification(NotificationType.ORDER_CANCELLED,
                                                                 order_details=str(order))
@@ -146,25 +155,35 @@ class PerpetualOrderManager:
         self.logger.info(f"Buy order completed at grid level {grid_level}.")
         # 标记网格层级完成状态
         self.grid_manager.complete_order(grid_level, PerpetualOrderSide.BUY_OPEN)
-        # 获取配对卖单层级
-        paired_sell_level = self.grid_manager.get_paired_sell_level(grid_level)
+        # 更新订单逻辑
+        await self.update_orders(grid_level.price)
 
-        if paired_sell_level and self.grid_manager.can_place_order(paired_sell_level, PerpetualOrderSide.BUY_CLOSE):
-            # 挂对冲卖单
-            await self._place_sell_order(grid_level, paired_sell_level, 0.1)
-        else:
-            self.logger.warning(
-                f"No valid sell grid level found for buy grid level {grid_level}. Skipping sell order placement.")
-        # 此时卖单多了一个，买单少了一个，需要取消最上方的卖单，增加最下方的买单
-        up_grid_level = self.grid_manager.get_grid_level_up_bound(grid_level)
-        if up_grid_level:
-            await self._cancel_grid_orders(up_grid_level)
-        blow_grid_level = self.grid_manager.get_grid_level_below_bound(grid_level)
-        if blow_grid_level:
-            await self._place_simple_buy_order(blow_grid_level, 1.0)
+    async def update_orders(self, price: float):
+        # 1. 取消所有未成交订单
+        all_pending_orders = self.order_book.get_open_orders()
+        for order in all_pending_orders:
+            await self.order_execution_strategy.cancel_order(order)
+
+        # 2. 获取候选价格
+        sell_candidates, buy_candidates = self.grid_manager.get_candidate_prices(price)
+        # 3. 挂出新订单
+        for sell_price in sell_candidates:
+            sell_grid = self.grid_manager.grid_levels[sell_price]
+            if not sell_grid:
+                continue
+            self.logger.info(f"Placing new sell order at price {sell_price}")
+            await self._place_simple_sell_order(sell_grid, 1)
+
+        for buy_price in buy_candidates:
+            buy_grid = self.grid_manager.grid_levels[buy_price]
+            if not buy_grid:
+                continue
+            self.logger.info(f"Placing new buy order at price {buy_price}")
+            await self._place_simple_buy_order(buy_grid, 1)
+
 
     async def _cancel_grid_orders(self, grid_level: GridLevel):
-        for order in grid_level.orders:
+        for order in grid_level.orders.values():
             await self.order_execution_strategy.cancel_order(order)
     async def _place_simple_buy_order(
             self,
@@ -292,8 +311,6 @@ class PerpetualOrderManager:
         if buy_order:
             # 建立网格层级配对关系
             self.grid_manager.pair_grid_levels(sell_grid_level, buy_grid_level, pairing_type="buy")
-            # 冻结加密货币余额
-            # self.balance_tracker.reserve_funds_for_sell(sell_order.amount)
             # 更新订单簿与网格状态
             self.grid_manager.mark_order_pending(buy_grid_level, buy_order)
             self.order_book.add_order(buy_order, buy_grid_level)
@@ -308,20 +325,8 @@ class PerpetualOrderManager:
     ) -> None:
         self.logger.info(f"Sell order completed at grid level {grid_level}.")
         self.grid_manager.complete_order(grid_level, PerpetualOrderSide.BUY_CLOSE)
-        paired_buy_level = self._get_or_create_paired_buy_level(grid_level)
-        if paired_buy_level:
-            await self._place_buy_order(grid_level, paired_buy_level, 0.1)
-        else:
-            self.logger.error(f"Failed to find or create a paired buy grid level for grid level {grid_level}.")
-
-        # 此时买单多了一个，卖单少了一个，需要取消最下方的买单，增加最上方的卖单
-        blow_grid_level = self.grid_manager.get_grid_level_below_bound(grid_level)
-        if blow_grid_level:
-            await self._cancel_grid_orders(blow_grid_level)
-        up_grid_level = self.grid_manager.get_grid_level_up_bound(grid_level)
-        if up_grid_level:
-            await self._place_simple_sell_order(up_grid_level, 1.0)
-
+        # 更新订单逻辑
+        await self.update_orders(grid_level.price)
 
     async def perform_initial_purchase(self, current_price: float) -> None:
         """

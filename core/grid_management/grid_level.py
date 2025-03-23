@@ -1,5 +1,5 @@
 from enum import Enum
-from typing import List, Optional
+from typing import List, Optional, Dict
 from core.order_handling.perpetual_order import PerpetualOrder
 
 class GridCycleState(Enum):
@@ -35,7 +35,7 @@ class GridLevel:
             state: 网格级别的初始状态
         """
         self.price: float = price                    # 网格级别的价格
-        self.orders: List[PerpetualOrder] = []               # 该网格级别的所有订单记录
+        self.orders: Dict[str,PerpetualOrder] = {}               # 该网格级别的所有订单记录
         self.state: GridCycleState = state          # 网格级别的当前状态
         self.paired_buy_level: Optional['GridLevel'] = None   # 配对的买入网格级别
         self.paired_sell_level: Optional['GridLevel'] = None  # 配对的卖出网格级别
@@ -47,8 +47,10 @@ class GridLevel:
         参数:
             order: 要记录的订单对象
         """
-        self.orders.append(order)
+        self.orders[order.identifier] = order
 
+    def remove_order(self, order_id: str):
+        self.orders.pop(order_id)
     def __str__(self) -> str:
         """
         返回网格级别的字符串表示

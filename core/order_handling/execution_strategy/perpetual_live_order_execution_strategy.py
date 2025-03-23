@@ -221,7 +221,8 @@ class PerpetualLiveOrderExecutionStrategy(OrderExecutionStrategyInterface):
             try:
                 cancel_result = await self.exchange_service.cancel_order(order_id, pair)
 
-                if cancel_result['status'] == 'canceled':
+                # okx 参考 https://www.okx.com/docs-v5/zh/#order-book-trading-trade-post-cancel-order
+                if cancel_result['status'] == 'canceled' :
                     self.logger.info(f"Successfully canceled perpetual order {order_id}.")
                     return True
 

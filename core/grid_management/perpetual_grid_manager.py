@@ -1,3 +1,4 @@
+import bisect
 import logging
 from typing import List, Optional, Tuple
 import numpy as np
@@ -33,7 +34,6 @@ class PerpetualGridManager:
         self.sorted_sell_grids: List[float] = []
         self.grid_levels: dict[float, GridLevel] = {}
         self.max_placed_orders: int = max_placed_orders
-        self.initialize_grids_and_levels()
 
 
     def pair_grid_levels(
@@ -530,3 +530,30 @@ class PerpetualGridManager:
             # 更新状态为等待卖出订单成交
             grid_level.state = GridCycleState.WAITING_FOR_SELL_FILL
             self.logger.info(f"Sell order placed and marked as pending at grid level {grid_level.price}.")
+
+    def find_price_index(self, price: float) -> int:
+        """ 使用二分查找定位价格插入位置 """
+        return bisect.bisect_left(self.price_grids, price)
+
+    def get_candidate_prices(self, market_price: float) -> tuple:
+        """ 获取当前需要挂单的买卖价格候选 """
+        # 寻找价格分界点
+        idx = self.find_price_index(market_price)
+
+        # 卖单候选：比市场价高的最接近的3个（降序列表中前段）
+        sell_prices = self.price_grids[idx:]
+        sell_candidates = sell_prices[:3]  # 取最后三个（即最小的三个高价）
+
+        # 买单候选：比市场价低的最接近的3个（降序列表中后段）
+        buy_prices = self.price_grids[:idx]
+        buy_candidates = buy_prices[-3:]  # 取前三个（即最大的三个低价）
+
+        return sell_candidates, buy_candidates
+
+    def get_all_pending_orders(self) -> list:
+        all_pending_orders = []
+        for _, grid_level in self.grid_levels.items():
+            for order in grid_level.orders.values():
+                if order.is_open():
+                    all_pending_orders.append(order)
+        return all_pending_orders

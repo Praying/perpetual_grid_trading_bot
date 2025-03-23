@@ -95,6 +95,7 @@ class PerpetualOrderStatusTracker:
     async def _process_open_orders(self) -> None:
         """批量处理所有未完成订单"""
         open_orders = self.order_book.get_open_orders()
+        self.logger.info(f"Processing {len(open_orders)} open orders")
         tasks = [self._create_task(self._query_and_handle_order(order)) for order in open_orders]
         results = await asyncio.gather(*tasks, return_exceptions=True)
         

@@ -7,13 +7,13 @@ from ..grid_management.grid_level import GridLevel
 class PerpetualOrderBook:
     def __init__(self):
         # 按持仓方向和操作类型分类存储订单
-        self.long_orders: Dict[str, List[PerpetualOrder]] = {
-            'open': [],   # 开多仓订单
-            'close': []    # 平多仓订单
+        self.long_orders: Dict[str, Dict[str, PerpetualOrder]] = {
+            'open': {},   # 开多仓订单
+            'close': {}    # 平多仓订单
         }
-        self.short_orders: Dict[str, List[PerpetualOrder]] = {
-            'open': [],   # 开空仓订单
-            'close': []    # 平空仓订单
+        self.short_orders: Dict[str, Dict[str, PerpetualOrder]] = {
+            'open': {},   # 开空仓订单
+            'close': {},    # 平空仓订单
         }
         
         # 条件订单（如止损、止盈等）
@@ -45,11 +45,11 @@ class PerpetualOrderBook:
             if order.side in [PerpetualOrderSide.BUY_OPEN, PerpetualOrderSide.SELL_CLOSE]:
                 target_list = self.long_orders['open'] if order.side == PerpetualOrderSide.BUY_OPEN \
                     else self.long_orders['close']
-                target_list.append(order)
+                target_list[order.identifier] = order
             else:  # OPEN_SHORT or CLOSE_LONG
                 target_list = self.short_orders['open'] if order.side == PerpetualOrderSide.SELL_OPEN \
                     else self.short_orders['close']
-                target_list.append(order)
+                target_list[order.identifier] = order
         
         # 处理网格关联逻辑
         if grid_level:
@@ -66,13 +66,13 @@ class PerpetualOrderBook:
             符合指定方向的订单列表
         """
         if side == PerpetualOrderSide.BUY_OPEN:
-            return self.long_orders['open']
+            return list(self.long_orders['open'].values())
         elif side == PerpetualOrderSide.BUY_CLOSE:
-            return self.long_orders['close']
+            return list(self.long_orders['close'].values())
         elif side == PerpetualOrderSide.SELL_OPEN:
-            return self.short_orders['open']
+            return list(self.short_orders['open'].values())
         else:  # CLOSE_SHORT
-            return self.short_orders['close']
+            return list(self.short_orders['close'].values())
     
     def get_conditional_orders(self) -> List[PerpetualOrder]:
         """获取所有条件订单（止损、止盈等）"""
@@ -93,9 +93,9 @@ class PerpetualOrderBook:
         """获取所有未成交订单（包括所有方向）"""
         all_orders = []
         for orders in self.long_orders.values():
-            all_orders.extend([order for order in orders if order.is_open()])
+            all_orders.extend([order for order in orders.values() if order.is_open()])
         for orders in self.short_orders.values():
-            all_orders.extend([order for order in orders if order.is_open()])
+            all_orders.extend([order for order in orders.values() if order.is_open()])
         all_orders.extend([order for order in self.conditional_orders if order.is_open()])
         return all_orders
     
@@ -112,7 +112,18 @@ class PerpetualOrderBook:
     def get_grid_level_for_order(self, order: PerpetualOrder) -> Optional[GridLevel]:
         """查询订单对应的网格层级（返回None表示非网格订单）"""
         return self.order_to_grid_map.get(order.identifier)
-    
+
+    def remove_order(self, order_id: str) -> None:
+        """从订单簿中移除指定订单"""
+        if order_id in self.long_orders['open']:
+            del self.long_orders['open'][order_id]
+        elif order_id in self.long_orders['close']:
+            del self.long_orders['close'][order_id]
+        elif order_id in self.short_orders['open']:
+            del self.short_orders['open'][order_id]
+        elif order_id in self.short_orders['close']:
+            del self.short_orders['close'][order_id]
+
     def update_order_status(
         self,
         order_id: str,
@@ -125,31 +136,28 @@ class PerpetualOrderBook:
             new_status: 新状态（如FILLED/CANCELED/LIQUIDATED等）
         """
         # 遍历所有可能的订单列表
-        all_orders = []
-        for orders in self.long_orders.values():
-            all_orders.extend(orders)
-        for orders in self.short_orders.values():
-            all_orders.extend(orders)
-        all_orders.extend(self.conditional_orders)
-        
-        # 查找并更新匹配的订单
-        for order in all_orders:
-            if order.identifier == order_id:
-                order.status = new_status
-                break
+        if order_id in self.long_orders['open']:
+            self.long_orders['open'][order_id].status = new_status
+        if order_id in self.long_orders['close']:
+            self.long_orders['close'][order_id].status = new_status
+        if order_id in self.short_orders['open']:
+            self.short_orders['open'][order_id].status = new_status
+        if order_id in self.short_orders['close']:
+            self.short_orders['close'][order_id].status = new_status
+
 
     def get_all_buy_orders(self) -> List[PerpetualOrder]:
         """获取全部买单（不区分网格订单）"""
-        return self.long_orders['open']
+        return list(self.long_orders['open'].values())
 
     def get_all_sell_orders(self) -> List[PerpetualOrder]:
         """获取全部卖单（不区分网格订单）"""
-        return self.long_orders['close']
+        return list(self.long_orders['close'].values())
 
     def get_buy_orders_with_grid(self) -> List[Tuple[PerpetualOrder, Optional[GridLevel]]]:
         """获取带网格信息的买单列表（返回格式：订单对象 + 关联的网格层级）"""
-        return [(order, self.order_to_grid_map.get(order.identifier, None)) for order in self.long_orders['open']]
+        return [(order, self.order_to_grid_map.get(order.identifier, None)) for order in self.long_orders['open'].values()]
 
     def get_sell_orders_with_grid(self) -> List[Tuple[PerpetualOrder, Optional[GridLevel]]]:
         """获取带网格信息的卖单列表（返回格式：订单对象 + 关联的网格层级）"""
-        return [(order, self.order_to_grid_map.get(order.identifier, None)) for order in self.long_orders['close']]
+        return [(order, self.order_to_grid_map.get(order.identifier, None)) for order in self.long_orders['close'].values()]

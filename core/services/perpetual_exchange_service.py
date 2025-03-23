@@ -240,7 +240,7 @@ class PerpetualExchangeService(ExchangeInterface):
         try:
             self.logger.info(f"Attempting to cancel order {order_id} for pair {pair}")
             cancellation_result = await self.exchange.cancel_order(order_id, pair)
-            
+            self.logger.info(f"Cancellation result: {cancellation_result}")
             if cancellation_result['status'] in ['canceled', 'closed']:
                 self.logger.info(f"Order {order_id} successfully canceled.")
                 return cancellation_result
