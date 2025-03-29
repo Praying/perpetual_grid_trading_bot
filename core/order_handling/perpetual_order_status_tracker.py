@@ -2,8 +2,6 @@ import asyncio, logging
 from typing import Optional
 from core.bot_management.event_bus import EventBus, Events
 from core.order_handling.execution_strategy.order_execution_strategy_interface import OrderExecutionStrategyInterface
-from core.order_handling.execution_strategy.perpetual_live_order_execution_strategy import \
-    PerpetualLiveOrderExecutionStrategy
 from core.order_handling.perpetual_order import PerpetualOrderStatus, PerpetualOrder
 from core.order_handling.perpetual_order_book import PerpetualOrderBook
 
@@ -15,18 +13,19 @@ class PerpetualEvents:
     FUNDING_FEE = "funding_fee"  # 资金费用结算
     ADL_TRIGGERED = "adl_triggered"  # 自动减仓触发
 
+
 class PerpetualOrderStatusTracker:
     """永续合约订单状态追踪器，专门处理U本位永续合约的订单状态变化"""
 
     def __init__(
-        self,
-        order_book: PerpetualOrderBook,
-        order_execution_strategy: OrderExecutionStrategyInterface,
-        event_bus: EventBus,
-        base_currency: str,
-        quote_currency: str,
-        polling_interval: float = 5.0,  # 合约默认使用更短的轮询间隔
-        funding_check_interval: float = 60.0,  # 资金费率检查间隔
+            self,
+            order_book: PerpetualOrderBook,
+            order_execution_strategy: OrderExecutionStrategyInterface,
+            event_bus: EventBus,
+            base_currency: str,
+            quote_currency: str,
+            polling_interval: float = 3.0,  # 合约默认使用更短的轮询间隔
+            funding_check_interval: float = 60.0,  # 资金费率检查间隔
     ):
         """初始化永续合约订单状态追踪器
 
@@ -80,6 +79,24 @@ class PerpetualOrderStatusTracker:
         await self._cancel_active_tasks()
         self.logger.info("Stopped perpetual order tracking and funding rate monitoring.")
 
+    def _create_task(self, coro):
+        """创建并管理异步任务
+
+        Args:
+            coro: 要执行的协程
+        """
+        task = asyncio.create_task(coro)
+        self._active_tasks.add(task)
+        task.add_done_callback(self._active_tasks.discard)
+        return task
+
+    async def _cancel_active_tasks(self):
+        """取消所有活跃任务"""
+        for task in self._active_tasks:
+            task.cancel()
+        await asyncio.gather(*self._active_tasks, return_exceptions=True)
+        self._active_tasks.clear()
+
     async def _track_open_order_statuses(self) -> None:
         """持续追踪所有未成交订单状态"""
         try:
@@ -98,7 +115,7 @@ class PerpetualOrderStatusTracker:
         self.logger.info(f"Processing {len(open_orders)} open orders")
         tasks = [self._create_task(self._query_and_handle_order(order)) for order in open_orders]
         results = await asyncio.gather(*tasks, return_exceptions=True)
-        
+
         for result in results:
             if isinstance(result, Exception):
                 self.logger.error(f"Error during order processing: {result}", exc_info=True)
@@ -144,7 +161,7 @@ class PerpetualOrderStatusTracker:
             else:
                 self.logger.warning(f"Unhandled order status '{remote_order.status}' for order {remote_order.identifier}.")
 
-            #self._check_liquidation_risk(remote_order)
+            # self._check_liquidation_risk(remote_order)
 
         except Exception as e:
             self.logger.error(f"Error handling perpetual order status change: {e}", exc_info=True)
@@ -170,23 +187,6 @@ class PerpetualOrderStatusTracker:
             f"Filled: {order.filled}, Remaining: {order.remaining}"
         )
 
-    async def _check_funding_rate(self) -> None:
-        """定期检查资金费率并处理资金费用结算"""
-        symbol = f"{self.base_currency}/{self.quote_currency}:{self.quote_currency}"
-        try:
-            while True:
-                try:
-                    funding_rate = await self.order_execution_strategy.get_funding_rate(symbol)
-                    self.event_bus.publish_sync(
-                        PerpetualEvents.FUNDING_FEE,
-                        {"symbol": symbol, "rate": funding_rate}
-                    )
-                except Exception as e:
-                    self.logger.error(f"Error checking funding rates: {e}", exc_info=True)
-                await asyncio.sleep(self.funding_check_interval)
-        except asyncio.CancelledError:
-            self.logger.info("Funding rate check task cancelled.")
-
     def _check_liquidation_risk(self, order: PerpetualOrder) -> None:
         """检查订单的强平风险
 
@@ -197,7 +197,7 @@ class PerpetualOrderStatusTracker:
             margin_ratio = self.order_execution_strategy.get_position_margin_ratio(
                 order.symbol, order.position_side
             )
-            
+
             if margin_ratio and margin_ratio < 0.1:  # 10%作为警戒线
                 self.event_bus.publish_sync(
                     PerpetualEvents.LIQUIDATION_WARNING,
@@ -216,20 +216,19 @@ class PerpetualOrderStatusTracker:
         except Exception as e:
             self.logger.error(f"Error checking liquidation risk: {e}", exc_info=True)
 
-    def _create_task(self, coro):
-        """创建并管理异步任务
-
-        Args:
-            coro: 要执行的协程
-        """
-        task = asyncio.create_task(coro)
-        self._active_tasks.add(task)
-        task.add_done_callback(self._active_tasks.discard)
-        return task
-
-    async def _cancel_active_tasks(self):
-        """取消所有活跃任务"""
-        for task in self._active_tasks:
-            task.cancel()
-        await asyncio.gather(*self._active_tasks, return_exceptions=True)
-        self._active_tasks.clear()
+    async def _check_funding_rate(self) -> None:
+        """定期检查资金费率并处理资金费用结算"""
+        symbol = f"{self.base_currency}/{self.quote_currency}:{self.quote_currency}"
+        try:
+            while True:
+                try:
+                    funding_rate = await self.order_execution_strategy.get_funding_rate(symbol)
+                    self.event_bus.publish_sync(
+                        PerpetualEvents.FUNDING_FEE,
+                        {"symbol": symbol, "rate": funding_rate}
+                    )
+                except Exception as e:
+                    self.logger.error(f"Error checking funding rates: {e}", exc_info=True)
+                await asyncio.sleep(self.funding_check_interval)
+        except asyncio.CancelledError:
+            self.logger.info("Funding rate check task cancelled.")
