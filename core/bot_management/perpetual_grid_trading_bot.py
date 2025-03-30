@@ -1,5 +1,8 @@
 import logging, traceback
 from typing import Optional, Dict, Any
+
+from core.order_handling.ccxt_exchange_factory import CCXTExchangeFactory
+from core.order_handling.order_executor.perpetual_order_executor import PerpetualOrderExecutor
 from core.services.exchange_service_factory import ExchangeServiceFactory
 from strategies.perpetual_plotter import PerpetualPlotter
 from strategies.perpetual_trading_performance_analyzer import PerpetualTradingPerformanceAnalyzer
@@ -82,6 +85,8 @@ class PerpetualGridTradingBot:
             self.is_running = False
 
             # 创建永续合约交易所服务和订单执行策略
+            ccxt_exchange = CCXTExchangeFactory.create(config_manager=self.config_manager, is_paper_trading=(self.trading_mode == TradingMode.PAPER_TRADING))
+            order_executor = PerpetualOrderExecutor(ccxt_exchange, self.trading_mode)
             self.exchange_service = ExchangeServiceFactory.create_exchange_service(self.config_manager, self.trading_mode)
             order_execution_strategy = OrderExecutionStrategyFactory.create(self.config_manager, self.exchange_service)
             
@@ -118,7 +123,7 @@ class PerpetualGridTradingBot:
                 self.balance_tracker,
                 order_book,
                 self.event_bus,
-                order_execution_strategy,
+                order_executor,
                 self.notification_handler,
                 self.trading_mode,
                 trading_pair,

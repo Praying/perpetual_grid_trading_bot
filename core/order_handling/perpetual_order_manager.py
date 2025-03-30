@@ -5,6 +5,7 @@ from core.bot_management.notification.notification_content import NotificationTy
 from core.bot_management.notification.notification_handler import NotificationHandler
 from core.order_handling.exceptions import OrderExecutionFailedError
 from core.order_handling.execution_strategy.order_execution_strategy_interface import OrderExecutionStrategyInterface
+from core.order_handling.order_executor.perpetual_order_executor import PerpetualOrderExecutor
 from core.order_handling.perpetual_order import PerpetualOrder, PerpetualOrderSide, PerpetualOrderType, \
     PerpetualOrderStatus
 from core.order_handling.perpetual_order_book import PerpetualOrderBook
@@ -27,7 +28,7 @@ class PerpetualOrderManager:
             balance_tracker: PerpetualBalanceTracker,
             order_book: PerpetualOrderBook,
             event_bus: EventBus,
-            order_execution_strategy: OrderExecutionStrategyInterface,
+            order_executor: PerpetualOrderExecutor,
             notification_handler: NotificationHandler,
             trading_mode: TradingMode,
             trading_pair: str,
@@ -44,7 +45,7 @@ class PerpetualOrderManager:
             balance_tracker: 资产余额追踪器
             order_book: 订单簿实例
             event_bus: 事件总线（用于发布/订阅系统事件）
-            order_execution_strategy: 订单执行策略接口（对接交易所）
+            order_executor: 订单执行策略接口（对接交易所）
             notification_handler: 通知处理器（用于发送报警/通知）
             trading_mode: 交易模式（实盘/回测）
             trading_pair: 交易对（如BTC/USDT）
@@ -56,7 +57,7 @@ class PerpetualOrderManager:
         self.balance_tracker = balance_tracker
         self.order_book = order_book
         self.event_bus = event_bus
-        self.order_execution_strategy = order_execution_strategy
+        self.order_executor = order_executor
         self.notification_handler = notification_handler  # 通知中心
         self.trading_mode = trading_mode
         self.trading_pair = trading_pair
@@ -162,7 +163,7 @@ class PerpetualOrderManager:
         # 1. 取消所有未成交订单
         all_pending_orders = self.order_book.get_open_orders()
         for order in all_pending_orders:
-            await self.order_execution_strategy.cancel_order(order)
+            await self.order_executor.cancel_order(order)
 
         # 2. 获取候选价格
         sell_candidates, buy_candidates = self.grid_manager.get_candidate_prices(price)
@@ -184,13 +185,13 @@ class PerpetualOrderManager:
 
     async def _cancel_grid_orders(self, grid_level: GridLevel):
         for order in grid_level.orders.values():
-            await self.order_execution_strategy.cancel_order(order)
+            await self.order_executor.cancel_order(order)
     async def _place_simple_buy_order(
             self,
             grid_level: GridLevel,
             amount: float # 这里amount对应的应该是合约的张数，不是币的数量,每张合约的数量是0.01
     ) -> None:
-        buy_order = await self.order_execution_strategy.execute_limit_order(
+        buy_order = await self.order_executor.execute_limit_order(
             PerpetualOrderSide.BUY_OPEN,
             self.trading_pair,
             amount,
@@ -209,7 +210,7 @@ class PerpetualOrderManager:
             grid_level: GridLevel,
             amount: float
     ) -> None:
-        sell_order = await self.order_execution_strategy.execute_limit_order(
+        sell_order = await self.order_executor.execute_limit_order(
             PerpetualOrderSide.BUY_CLOSE,
             self.trading_pair,
             amount,
@@ -241,7 +242,7 @@ class PerpetualOrderManager:
         # adjusted_quantity = self.order_validator.adjust_and_validate_sell_quantity(self.balance_tracker.crypto_balance, quantity)
         adjusted_quantity = 1.0
         # 执行限价卖单
-        sell_order = await self.order_execution_strategy.execute_limit_order(
+        sell_order = await self.order_executor.execute_limit_order(
             PerpetualOrderSide.BUY_CLOSE,
             self.trading_pair,
             adjusted_quantity,
@@ -302,7 +303,7 @@ class PerpetualOrderManager:
         # adjusted_quantity = self.order_validator.adjust_and_validate_sell_quantity(self.balance_tracker.crypto_balance, quantity)
         adjusted_quantity = 1.0
         # 执行限价卖单
-        buy_order = await self.order_execution_strategy.execute_limit_order(
+        buy_order = await self.order_executor.execute_limit_order(
             PerpetualOrderSide.BUY_OPEN,
             self.trading_pair,
             adjusted_quantity,
@@ -347,7 +348,7 @@ class PerpetualOrderManager:
 
         try:  # 执行市价单建仓
             buy_amount = max(initial_quantity / current_price, self.exchange_service.amount_precision)
-            buy_order = await self.order_execution_strategy.execute_market_order(
+            buy_order = await self.order_executor.execute_market_order(
                 PerpetualOrderSide.BUY_OPEN,
                 self.trading_pair,
                 buy_amount,  # 这里算出来的initial_quantity是总价值
@@ -391,7 +392,7 @@ class PerpetualOrderManager:
                     adjusted_buy_order_quantity = 1.0
                     self.logger.info(
                         f"Placing initial buy limit order at grid level {price} for  {self.trading_pair}.")
-                    order = await self.order_execution_strategy.execute_limit_order(
+                    order = await self.order_executor.execute_limit_order(
                         PerpetualOrderSide.BUY_OPEN,
                         self.trading_pair,
                         adjusted_buy_order_quantity,
@@ -442,7 +443,7 @@ class PerpetualOrderManager:
 
                     self.logger.info(
                         f"Placing initial sell limit order at grid level {price} for {adjusted_sell_order_quantity} {self.trading_pair}.")
-                    order = await self.order_execution_strategy.execute_limit_order(
+                    order = await self.order_executor.execute_limit_order(
                         PerpetualOrderSide.BUY_CLOSE,
                         self.trading_pair,
                         adjusted_sell_order_quantity,
