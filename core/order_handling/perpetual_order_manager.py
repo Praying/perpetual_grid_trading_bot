@@ -162,8 +162,7 @@ class PerpetualOrderManager:
     async def update_orders(self, price: float):
         # 1. 取消所有未成交订单
         all_pending_orders = self.order_book.get_open_orders()
-        for order in all_pending_orders:
-            await self.order_executor.cancel_order(order)
+        await self.order_executor.cancel_orders(all_pending_orders)
 
         # 2. 获取候选价格
         sell_candidates, buy_candidates = self.grid_manager.get_candidate_prices(price)
@@ -184,8 +183,8 @@ class PerpetualOrderManager:
 
 
     async def _cancel_grid_orders(self, grid_level: GridLevel):
-        for order in grid_level.orders.values():
-            await self.order_executor.cancel_order(order)
+        await self.order_executor.cancel_orders(list(grid_level.orders.values()))
+
     async def _place_simple_buy_order(
             self,
             grid_level: GridLevel,
