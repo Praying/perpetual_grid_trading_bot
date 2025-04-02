@@ -1,7 +1,8 @@
 import asyncio, logging
-from typing import Optional
+from typing import Optional, List
 from core.bot_management.event_bus import EventBus, Events
 from core.order_handling.execution_strategy.order_execution_strategy_interface import OrderExecutionStrategyInterface
+from core.order_handling.order_executor.perpetual_order_executor import PerpetualOrderExecutor
 from core.order_handling.perpetual_order import PerpetualOrderStatus, PerpetualOrder
 from core.order_handling.perpetual_order_book import PerpetualOrderBook
 
@@ -21,6 +22,7 @@ class PerpetualOrderStatusTracker:
             self,
             order_book: PerpetualOrderBook,
             order_execution_strategy: OrderExecutionStrategyInterface,
+            order_executor: PerpetualOrderExecutor,
             event_bus: EventBus,
             base_currency: str,
             quote_currency: str,
@@ -38,6 +40,7 @@ class PerpetualOrderStatusTracker:
         """
         self.order_book = order_book
         self.order_execution_strategy = order_execution_strategy
+        self.order_executor = order_executor
         self.event_bus = event_bus
         self.polling_interval = polling_interval
         self.funding_check_interval = funding_check_interval
@@ -45,6 +48,7 @@ class PerpetualOrderStatusTracker:
         self._funding_check_task = None
         self.base_currency = base_currency
         self.quote_currency = quote_currency
+        self.trading_pair = f"{base_currency}/{quote_currency}:{quote_currency}"
         self._active_tasks = set()
         self.logger = logging.getLogger(self.__class__.__name__)
 
@@ -112,13 +116,26 @@ class PerpetualOrderStatusTracker:
     async def _process_open_orders(self) -> None:
         """批量处理所有未完成订单"""
         open_orders = self.order_book.get_open_orders()
+        if len(open_orders) == 0:
+            return
         self.logger.info(f"Processing {len(open_orders)} open orders")
-        tasks = [self._create_task(self._query_and_handle_order(order)) for order in open_orders]
-        results = await asyncio.gather(*tasks, return_exceptions=True)
+        await self._query_and_handle_orders(open_orders)
+        # tasks = [self._create_task(self._query_and_handle_order(order)) for order in open_orders]
+        # results = await asyncio.gather(*tasks, return_exceptions=True)
+        #
+        # for result in results:
+        #     if isinstance(result, Exception):
+        #         self.logger.error(f"Error during order processing: {result}", exc_info=True)
 
-        for result in results:
-            if isinstance(result, Exception):
-                self.logger.error(f"Error during order processing: {result}", exc_info=True)
+    async def _query_and_handle_orders(self, orders: List[PerpetualOrder]):
+        """查询并处理多个订单状态"""
+        try:
+            order_ids = [order.identifier for order in orders]
+            remote_orders = await self.order_executor.fetch_orders(self.trading_pair,order_ids)
+            for order in remote_orders:
+                self._handle_order_status_change(order)
+        except Exception as error:
+            self.logger.error(f"Failed to query remote order with pair {self.trading_pair} : {error}", exc_info=True)
 
     async def _query_and_handle_order(self, local_order: PerpetualOrder):
         """查询并处理单个订单状态"""

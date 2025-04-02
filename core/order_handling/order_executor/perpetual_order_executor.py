@@ -393,8 +393,9 @@ class PerpetualOrderExecutor:
                     # 处理取消结果
                     canceled_ids = set()
                     for result in cancel_results:
-                        if result.get('status') in ['canceled', 'closed']:
+                        if self.exchange.name == "OKX" and result['info']['sCode'] == '0':
                             canceled_ids.add(result.get('id'))
+                        # TODO 需要兼容其他交易所
                     
                     # 更新订单状态和结果
                     for order in symbol_orders:
@@ -437,4 +438,276 @@ class PerpetualOrderExecutor:
 
         self.logger.info(f"批量取消订单完成，成功: {sum(results.values())}, 失败: {len(results) - sum(results.values())}")
         return results
+
+    async def fetch_orders(
+            self,
+            trading_pair: str,
+            order_ids: Optional[list[str]] = None,
+            status: Optional[PerpetualOrderStatus] = None,
+            since: Optional[int] = None,
+            limit: Optional[int] = None
+    ) -> list[PerpetualOrder]:
+        """
+        批量查询订单状态
+        
+        参数:
+            trading_pair: 交易对
+            order_ids: 订单ID列表，如果提供则只查询指定ID的订单
+            status: 订单状态过滤，如果提供则只返回指定状态的订单
+            since: 起始时间戳（毫秒），如果提供则只返回该时间之后的订单
+            limit: 返回订单数量限制，如果提供则最多返回指定数量的订单
+            
+        返回:
+            订单对象列表
+        """
+        self.logger.info(f"批量查询订单状态: {trading_pair}")
+        
+        # 回测模式下不支持查询订单，返回空列表
+        if self.trading_mode == TradingMode.BACKTEST:
+            self.logger.warning("回测模式下不支持查询订单状态")
+            return []
+        
+        # 检查交易所是否支持查询订单
+        supports_fetch_orders = hasattr(self.exchange, 'has') and self.exchange.has.get('fetchOrders', False)
+        supports_fetch_open_orders = hasattr(self.exchange, 'has') and self.exchange.has.get('fetchOpenOrders', False)
+        supports_fetch_closed_orders = hasattr(self.exchange, 'has') and self.exchange.has.get('fetchClosedOrders', False)
+        
+        # 如果提供了订单ID列表，优先使用fetchOrders方法
+        if order_ids and len(order_ids) > 0:
+            return await self._fetch_orders_by_ids(trading_pair, order_ids)
+        
+        # 根据状态过滤使用不同的API方法
+        if status == PerpetualOrderStatus.OPEN and supports_fetch_open_orders:
+            return await self._fetch_open_orders(trading_pair, since, limit)
+        elif status in [PerpetualOrderStatus.CLOSED, PerpetualOrderStatus.CANCELED] and supports_fetch_closed_orders:
+            return await self._fetch_closed_orders(trading_pair, since, limit)
+        elif supports_fetch_orders:
+            return await self._fetch_all_orders(trading_pair, status, since, limit)
+        else:
+            self.logger.warning(f"交易所 {self.exchange.id} 不支持查询订单状态")
+            return []
+    
+    async def _fetch_orders_by_ids(
+            self,
+            trading_pair: str,
+            order_ids: list[str]
+    ) -> list[PerpetualOrder]:
+        """
+        通过订单ID列表查询订单
+        
+        参数:
+            trading_pair: 交易对
+            order_ids: 订单ID列表
+            
+        返回:
+            订单对象列表
+        """
+        orders = []
+        retry_count = 0
+        
+        while retry_count < self.max_retries:
+            try:
+                # 检查交易所是否支持批量查询订单
+                if hasattr(self.exchange, 'fetch_orders_by_ids') and callable(getattr(self.exchange, 'fetch_orders_by_ids')):
+                    # 批量查询订单
+                    responses = await self.exchange.fetch_orders_by_ids(order_ids, trading_pair)
+                    for response in responses:
+                        orders.append(_create_order_from_response(response))
+                else:
+                    # 逐个查询订单
+                    tasks = []
+                    for order_id in order_ids:
+                        tasks.append(self.exchange.fetch_order(order_id, trading_pair))
+                    
+                    responses = await asyncio.gather(*tasks, return_exceptions=True)
+                    for response in responses:
+                        if not isinstance(response, Exception):
+                            orders.append(_create_order_from_response(response))
+                        else:
+                            self.logger.warning(f"查询订单失败: {response}")
+                
+                self.logger.info(f"成功查询 {len(orders)} 个订单")
+                return orders
+                
+            except ccxt.NetworkError as e:
+                retry_count += 1
+                self.logger.warning(f"网络错误，尝试重新查询订单 ({retry_count}/{self.max_retries}): {e}")
+                await asyncio.sleep(self.retry_delay)
+                
+            except ccxt.ExchangeError as e:
+                self.logger.error(f"交易所错误: {e}")
+                raise OrderExecutionFailedError(f"交易所API错误: {e}")
+                
+            except Exception as e:
+                self.logger.error(f"查询订单时发生未知错误: {e}", exc_info=True)
+                raise OrderExecutionFailedError(f"查询订单失败: {e}")
+        
+        self.logger.error(f"达到最大重试次数，订单查询失败")
+        return []
+    
+    async def _fetch_open_orders(
+            self,
+            trading_pair: str,
+            since: Optional[int] = None,
+            limit: Optional[int] = None
+    ) -> list[PerpetualOrder]:
+        """
+        查询未成交订单
+        
+        参数:
+            trading_pair: 交易对
+            since: 起始时间戳（毫秒）
+            limit: 返回订单数量限制
+            
+        返回:
+            未成交订单对象列表
+        """
+        retry_count = 0
+        
+        while retry_count < self.max_retries:
+            try:
+                # 查询未成交订单
+                params = {}
+                if since is not None:
+                    params['since'] = since
+                if limit is not None:
+                    params['limit'] = limit
+                
+                responses = await self.exchange.fetch_open_orders(trading_pair, since, limit, params)
+                
+                orders = []
+                for response in responses:
+                    orders.append(_create_order_from_response(response))
+                
+                self.logger.info(f"成功查询 {len(orders)} 个未成交订单")
+                return orders
+                
+            except ccxt.NetworkError as e:
+                retry_count += 1
+                self.logger.warning(f"网络错误，尝试重新查询未成交订单 ({retry_count}/{self.max_retries}): {e}")
+                await asyncio.sleep(self.retry_delay)
+                
+            except ccxt.ExchangeError as e:
+                self.logger.error(f"交易所错误: {e}")
+                raise OrderExecutionFailedError(f"交易所API错误: {e}")
+                
+            except Exception as e:
+                self.logger.error(f"查询未成交订单时发生未知错误: {e}", exc_info=True)
+                raise OrderExecutionFailedError(f"查询未成交订单失败: {e}")
+        
+        self.logger.error(f"达到最大重试次数，未成交订单查询失败")
+        return []
+    
+    async def _fetch_closed_orders(
+            self,
+            trading_pair: str,
+            since: Optional[int] = None,
+            limit: Optional[int] = None
+    ) -> list[PerpetualOrder]:
+        """
+        查询已成交或已取消订单
+        
+        参数:
+            trading_pair: 交易对
+            since: 起始时间戳（毫秒）
+            limit: 返回订单数量限制
+            
+        返回:
+            已成交或已取消订单对象列表
+        """
+        retry_count = 0
+        
+        while retry_count < self.max_retries:
+            try:
+                # 查询已成交或已取消订单
+                params = {}
+                if since is not None:
+                    params['since'] = since
+                if limit is not None:
+                    params['limit'] = limit
+                
+                responses = await self.exchange.fetch_closed_orders(trading_pair, since, limit, params)
+                
+                orders = []
+                for response in responses:
+                    orders.append(_create_order_from_response(response))
+                
+                self.logger.info(f"成功查询 {len(orders)} 个已成交或已取消订单")
+                return orders
+                
+            except ccxt.NetworkError as e:
+                retry_count += 1
+                self.logger.warning(f"网络错误，尝试重新查询已成交或已取消订单 ({retry_count}/{self.max_retries}): {e}")
+                await asyncio.sleep(self.retry_delay)
+                
+            except ccxt.ExchangeError as e:
+                self.logger.error(f"交易所错误: {e}")
+                raise OrderExecutionFailedError(f"交易所API错误: {e}")
+                
+            except Exception as e:
+                self.logger.error(f"查询已成交或已取消订单时发生未知错误: {e}", exc_info=True)
+                raise OrderExecutionFailedError(f"查询已成交或已取消订单失败: {e}")
+        
+        self.logger.error(f"达到最大重试次数，已成交或已取消订单查询失败")
+        return []
+    
+    async def _fetch_all_orders(
+            self,
+            trading_pair: str,
+            status: Optional[PerpetualOrderStatus] = None,
+            since: Optional[int] = None,
+            limit: Optional[int] = None
+    ) -> list[PerpetualOrder]:
+        """
+        查询所有订单
+        
+        参数:
+            trading_pair: 交易对
+            status: 订单状态过滤
+            since: 起始时间戳（毫秒）
+            limit: 返回订单数量限制
+            
+        返回:
+            订单对象列表
+        """
+        retry_count = 0
+        
+        while retry_count < self.max_retries:
+            try:
+                # 查询所有订单
+                params = {}
+                if since is not None:
+                    params['since'] = since
+                if limit is not None:
+                    params['limit'] = limit
+                if status is not None:
+                    params['status'] = status.value
+                
+                responses = await self.exchange.fetch_orders(trading_pair, since, limit, params)
+                
+                orders = []
+                for response in responses:
+                    order = _create_order_from_response(response)
+                    # 如果指定了状态过滤，则只返回符合条件的订单
+                    if status is None or order.status == status:
+                        orders.append(order)
+                
+                self.logger.info(f"成功查询 {len(orders)} 个订单")
+                return orders
+                
+            except ccxt.NetworkError as e:
+                retry_count += 1
+                self.logger.warning(f"网络错误，尝试重新查询订单 ({retry_count}/{self.max_retries}): {e}")
+                await asyncio.sleep(self.retry_delay)
+                
+            except ccxt.ExchangeError as e:
+                self.logger.error(f"交易所错误: {e}")
+                raise OrderExecutionFailedError(f"交易所API错误: {e}")
+                
+            except Exception as e:
+                self.logger.error(f"查询订单时发生未知错误: {e}", exc_info=True)
+                raise OrderExecutionFailedError(f"查询订单失败: {e}")
+        
+        self.logger.error(f"达到最大重试次数，订单查询失败")
+        return []
 

@@ -110,6 +110,7 @@ class PerpetualGridTradingBot:
             self.order_status_tracker = PerpetualOrderStatusTracker(
                 order_book=order_book,
                 order_execution_strategy=order_execution_strategy,
+                order_executor=order_executor,
                 event_bus=self.event_bus,
                 base_currency=base_currency,
                 quote_currency=quote_currency,
