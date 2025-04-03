@@ -239,7 +239,9 @@ class PerpetualOrderStatusTracker:
         try:
             while True:
                 try:
-                    funding_rate = await self.order_execution_strategy.get_funding_rate(symbol)
+                    #funding_rate = await self.order_execution_strategy.get_funding_rate(symbol)
+                    funding_rate = await self.order_executor.fetch_funding_rate(symbol)
+                    self.logger.info(f"Funding rate for {symbol}: {funding_rate}")
                     self.event_bus.publish_sync(
                         PerpetualEvents.FUNDING_FEE,
                         {"symbol": symbol, "rate": funding_rate}

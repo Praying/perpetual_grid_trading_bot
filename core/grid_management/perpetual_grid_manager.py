@@ -458,7 +458,7 @@ class PerpetualGridManager:
                     self.logger.info(f"配对的卖出网格级别 {grid_level.paired_sell_level.price} 转换为 READY_TO_SELL")
 
             elif order_side == PerpetualOrderSide.BUY_CLOSE:
-                grid_level.state = GridCycleState.READY_TO_BUY
+                grid_level.state = GridCycleState.READY_TO_BUY_OR_SELL
                 self.logger.info(f"合约订单完成，网格级别 {grid_level.price} 转换为 READY_TO_BUY")
 
                 if grid_level.paired_buy_level:
@@ -541,12 +541,12 @@ class PerpetualGridManager:
         idx = self.find_price_index(market_price)
 
         # 卖单候选：比市场价高的最接近的3个（降序列表中前段）
-        sell_prices = self.price_grids[idx:]
-        sell_candidates = sell_prices[:3]  # 取最后三个（即最小的三个高价）
+        sell_prices = self.price_grids[idx+1:]
+        sell_candidates = sell_prices[:5]  # 取最后三个（即最小的三个高价）
 
         # 买单候选：比市场价低的最接近的3个（降序列表中后段）
         buy_prices = self.price_grids[:idx]
-        buy_candidates = buy_prices[-3:]  # 取前三个（即最大的三个低价）
+        buy_candidates = buy_prices[-5:]  # 取前三个（即最大的三个低价）
 
         return sell_candidates, buy_candidates
 

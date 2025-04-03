@@ -273,7 +273,7 @@ class PerpetualOrderExecutor:
                 )
                 
                 # 创建订单对象
-                order = _create_order_from_response(response, side, trading_pair, amount, current_price, PerpetualOrderType.MARKET)
+                order = _create_order_from_response(response)
                 self.logger.info(f"市价单创建成功: {order.identifier}")
                 return order
                 
@@ -711,3 +711,13 @@ class PerpetualOrderExecutor:
         self.logger.error(f"达到最大重试次数，订单查询失败")
         return []
 
+    async def fetch_funding_rate(self, trading_pair: str):
+        try:
+            response = await self.exchange.fetch_funding_rate(trading_pair)
+            return response['fundingRate']
+        except ccxt.ExchangeError as e:
+            self.logger.error(f"交易所错误: {e}")
+            raise OrderExecutionFailedError(f"交易所API错误: {e}")
+        except Exception as e:
+            self.logger.error(f"查询资金费率时发生未知错误: {e}", exc_info=True)
+            raise OrderExecutionFailedError(f"查询资金费率失败: {e}")
