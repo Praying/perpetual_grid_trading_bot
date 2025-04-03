@@ -1,5 +1,8 @@
 from typing import Dict, List, Optional, Tuple, Union
 import logging
+
+from ccxt.base.types import OrderRequest
+
 from config.trading_mode import TradingMode
 from core.bot_management.notification.notification_content import NotificationType
 from core.bot_management.notification.notification_handler import NotificationHandler
@@ -173,13 +176,21 @@ class PerpetualOrderManager:
                 continue
             self.logger.info(f"Placing new sell order at price {sell_price}")
             await self._place_simple_sell_order(sell_grid, 1)
-
+        buy_order_requests = []
         for buy_price in buy_candidates:
             buy_grid = self.grid_manager.grid_levels[buy_price]
             if not buy_grid:
                 continue
             self.logger.info(f"Placing new buy order at price {buy_price}")
-            await self._place_simple_buy_order(buy_grid, 1)
+            buy_order_requests.append(self._create_order_request(buy_grid, 1.0, PerpetualOrderSide.BUY_OPEN))
+            #await self._place_simple_buy_order(buy_grid, 1)
+        await self._place_buy_orders(buy_order_requests)
+
+    async def _place_buy_orders(self, order_requests: List[OrderRequest]):
+        await self.order_executor.execute_limit_orders(order_requests)
+
+    def _create_order_request(self, grid_level: GridLevel, amount: float, side: PerpetualOrderSide) -> OrderRequest:
+        return OrderRequest(symbol=self.trading_pair, type='limit', price=grid_level.price, amount=amount, side='buy' if side == PerpetualOrderSide.BUY_OPEN else 'sell')
 
 
     async def _cancel_grid_orders(self, grid_level: GridLevel):

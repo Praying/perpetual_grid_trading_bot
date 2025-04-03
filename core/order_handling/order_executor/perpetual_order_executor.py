@@ -1,9 +1,11 @@
-from typing import Optional, Dict, Any, Union
+from typing import Optional, Dict, Any, Union, List
 import logging
 import time
 import ccxt
 import asyncio
 from decimal import Decimal
+
+from ccxt.base.types import OrderRequest
 
 from core.order_handling.perpetual_order import PerpetualOrder, PerpetualOrderSide, PerpetualOrderType, \
     PerpetualOrderStatus, MarginType, PositionSide
@@ -166,6 +168,14 @@ class PerpetualOrderExecutor:
         if not hasattr(self.exchange, 'has') or not self.exchange.has.get('future'):
             self.logger.error(f"交易所 {self.exchange.id} 不支持永续合约交易")
             raise ValueError(f"交易所 {self.exchange.id} 不支持永续合约交易")
+
+    async def execute_limit_orders(self, order_requests: List[OrderRequest]):
+        self.logger.info("批量执行限价单")
+        remote_orders = self.exchange.create_orders(order_requests)
+        for order in remote_orders:
+            self.logger.info(f"执行订单结果 {order}")
+
+        return list(remote_orders.values())
 
     async def execute_limit_order(
             self,
@@ -721,3 +731,6 @@ class PerpetualOrderExecutor:
         except Exception as e:
             self.logger.error(f"查询资金费率时发生未知错误: {e}", exc_info=True)
             raise OrderExecutionFailedError(f"查询资金费率失败: {e}")
+
+    def create_order_request(self, symbol, price, amount, side) -> OrderRequest:
+        return OrderRequest(symbol=symbol, type='limit', price=price, amount=amount, side=side)
