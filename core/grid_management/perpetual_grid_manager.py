@@ -542,11 +542,11 @@ class PerpetualGridManager:
 
         # 卖单候选：比市场价高的最接近的3个（降序列表中前段）
         sell_prices = self.price_grids[idx+1:]
-        sell_candidates = sell_prices[:5]  # 取最后三个（即最小的三个高价）
+        sell_candidates = sell_prices[:5]  # 取最后5个（即最小的5个高价）
 
         # 买单候选：比市场价低的最接近的3个（降序列表中后段）
         buy_prices = self.price_grids[:idx]
-        buy_candidates = buy_prices[-5:]  # 取前三个（即最大的三个低价）
+        buy_candidates = buy_prices[-5:]  # 取前5个（即最大的5个低价）
 
         return sell_candidates, buy_candidates
 

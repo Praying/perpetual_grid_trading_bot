@@ -54,10 +54,11 @@ class PerpetualOrder:
     def __init__(
             self,
             identifier: str,
-            status: PerpetualOrderStatus,
-            order_type: PerpetualOrderType,
-            side: PerpetualOrderSide,
-            price: float,
+            client_order_id: str,
+            status: Optional[PerpetualOrderStatus],
+            order_type: Optional[PerpetualOrderType],
+            side: Optional[PerpetualOrderSide],
+            price: Optional[float],
             average: Optional[float],
             contracts: float,  # 合约张数
             contract_size: float,  # 合约面值
@@ -67,7 +68,7 @@ class PerpetualOrder:
             timestamp: int,
             datetime: Optional[str],
             last_trade_timestamp: Optional[int],
-            symbol: str,
+            symbol: Optional[str],
             time_in_force: Optional[str],
             leverage: float,  # 杠杆倍数
             margin_type: MarginType,  # 保证金类型
@@ -82,6 +83,7 @@ class PerpetualOrder:
             info: Optional[Dict[str, Union[str, float, dict]]] = None
     ):
         self.identifier = identifier
+        self.clientOrderId = client_order_id
         self.status = status
         self.order_type = order_type
         self.side = side
@@ -114,6 +116,9 @@ class PerpetualOrder:
         """获取合约头寸大小（合约张数 * 合约面值）"""
         return self.contracts * self.contract_size
 
+    def client_order_id(self) -> str:
+        """获取客户端订单ID"""
+        return self.clientOrderId
     def is_filled(self) -> bool:
         """检查订单是否已完全成交"""
         return self.status == PerpetualOrderStatus.CLOSED
@@ -146,7 +151,7 @@ class PerpetualOrder:
 
     def __str__(self) -> str:
         return (
-            f"PerpetualOrder(id={self.identifier}, status={self.status}, "
+            f"PerpetualOrder(id={self.identifier}, clientOrderId={self.clientOrderId}, status={self.status}, "
             f"type={self.order_type}, side={self.side}, price={self.price}, average={self.average}, "
             f"contracts={self.contracts}, contract_size={self.contract_size}, filled={self.filled}, "
             f"remaining={self.remaining}, timestamp={self.timestamp}, datetime={self.datetime}, "

@@ -51,9 +51,10 @@ def _create_order_from_response(
         status = PerpetualOrderStatus.OPEN
     return PerpetualOrder(
         identifier=response.get("id", ""),
+        client_order_id=response.get("clientOrderId", ""),
         status=PerpetualOrderStatus(status),
-        order_type=PerpetualOrderType(response.get("type", "unknown").lower()),
-        side=PerpetualOrderSide(response.get("side", "unknown").lower()),
+        order_type= None if not response.get("type", "unknown") else PerpetualOrderType(response.get("type", "unknown").lower()),
+        side=None if not response.get("side") else PerpetualOrderSide(response.get("side", "unknown").lower()),
         price=0.0 if not response.get("price", 0.0) else float(response.get("price", 0.0)),
         average=response.get("average", None),
         amount=0.0 if not response.get("amount", 0.0) else float(response.get("amount", 0.0)),
@@ -62,7 +63,7 @@ def _create_order_from_response(
         timestamp=0 if not response.get("timestamp", 0) else int(response.get("timestamp", 0)),
         datetime=response.get("datetime", None),
         last_trade_timestamp=response.get("lastTradeTimestamp", None),
-        symbol=response.get("symbol", ""),
+        symbol=None if not response.get("symbol", "") else response.get("symbol", ""),
         time_in_force=response.get("timeInForce", None),
         trades=response.get("trades", []),
         fee=response.get("fee", None),
@@ -169,13 +170,12 @@ class PerpetualOrderExecutor:
             self.logger.error(f"交易所 {self.exchange.id} 不支持永续合约交易")
             raise ValueError(f"交易所 {self.exchange.id} 不支持永续合约交易")
 
-    async def execute_limit_orders(self, order_requests: List[OrderRequest]):
+    async def execute_limit_orders(self, symbol: str, order_requests: List[OrderRequest]) -> List[PerpetualOrder]:
         self.logger.info("批量执行限价单")
-        remote_orders = self.exchange.create_orders(order_requests)
-        for order in remote_orders:
-            self.logger.info(f"执行订单结果 {order}")
-
-        return list(remote_orders.values())
+        remote_orders = await self.exchange.create_orders(order_requests)
+        order_ids = [order.get("id") for order in remote_orders]
+        perpetual_orders = await self.fetch_orders(symbol, order_ids)
+        return perpetual_orders
 
     async def execute_limit_order(
             self,
