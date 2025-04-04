@@ -380,6 +380,9 @@ class PerpetualGridManager:
         spacing_type = self.config_manager.get_spacing_type()
         return bottom_range, top_range, num_grids, spacing_type
 
+    def get_grid_value(self) -> float:
+        return self.config_manager.get_grid_value()
+
     def _extract_grid_new_config(self) -> Tuple[float, float, float, int, SpacingType]:
         """
         从配置管理器中提取新的网格配置参数。

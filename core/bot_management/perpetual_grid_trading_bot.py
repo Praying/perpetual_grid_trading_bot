@@ -130,7 +130,6 @@ class PerpetualGridTradingBot:
                 trading_pair,
                 strategy_type,
                 self.exchange_service,
-                5.0,
             )
             
             # 创建交易性能分析器和图表绘制器

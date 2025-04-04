@@ -38,7 +38,6 @@ class PerpetualOrderManager:
             trading_pair: str,
             strategy_type: StrategyType,
             exchange_service: PerpetualExchangeService,
-            min_order_value: float = 10.0,  # 最小订单价值（以USDT计）
     ):
         """
         初始化订单管理器
@@ -67,7 +66,9 @@ class PerpetualOrderManager:
         self.trading_pair = trading_pair
         self.strategy_type: StrategyType = strategy_type  # 策略类型
         self.exchange_service = exchange_service
-        self.min_order_value = min_order_value
+        self.amount_precision_map = {} # symbol -> float
+        self.price_precision_map = {}  # symbol -> float
+        self.contract_size_map = {} # symbol -> float
 
         # 订阅订单状态变更事件
         self.event_bus.subscribe(Events.ORDER_FILLED, self._on_order_filled)
@@ -169,6 +170,7 @@ class PerpetualOrderManager:
         all_pending_orders = self.order_book.get_open_orders()
         await self.order_executor.cancel_orders(all_pending_orders)
 
+
         # 2. 获取新的候选价格并放置订单
         sell_price_list, buy_price_list = self.grid_manager.get_candidate_prices(price)
 
@@ -181,8 +183,9 @@ class PerpetualOrderManager:
         await self._place_grid_orders(PerpetualOrderSide.BUY_CLOSE, sell_grid_level_list)
 
 
-    def _create_order_request(self, grid_level: GridLevel, amount: float, side: PerpetualOrderSide) -> tuple[
+    async def _create_order_request(self, grid_level: GridLevel,side: PerpetualOrderSide) -> tuple[
         str, OrderRequest]:
+        amount = await self._calc_contract_amount(self.trading_pair, grid_level.price)
         # OKX clientOrderId = self.safe_string_2(params, 'clOrdId', 'clientOrderId')
         clientOrderId = str(uuid.uuid4().hex)
         return clientOrderId, OrderRequest(symbol=self.trading_pair, type='limit', price=grid_level.price, amount=amount, side='buy' if side == PerpetualOrderSide.BUY_OPEN else 'sell', params={'clientOrderId': clientOrderId})
@@ -306,6 +309,24 @@ class PerpetualOrderManager:
     async def _simulate_fill(self, buy_order, timestamp):
         pass
 
+    async def _calc_contract_amount(self, symbol: str, price: float) -> float:
+        if not self.amount_precision_map.get(symbol):
+            self.amount_precision_map[symbol] = await self.order_executor.amount_precision(symbol)
+
+        if not self.price_precision_map.get(symbol):
+            self.price_precision_map[symbol] = await self.order_executor.price_precision(symbol)
+
+        if not self.contract_size_map.get(symbol):
+            self.contract_size_map[symbol] = await self.order_executor.contract_size(symbol)
+
+        amount_precision = self.amount_precision_map.get(symbol)
+        price_precision = self.price_precision_map.get(symbol)
+        contract_size = self.contract_size_map.get(symbol)
+        grid_value = self.grid_manager.get_grid_value()
+        total_amount = round(grid_value / (contract_size * price), int(amount_precision))
+        self.logger.info(f"Calculating contract amount {total_amount} for {symbol}. amount_precision: {amount_precision}, price_precision: {price_precision}, contract_size: {contract_size}." )
+        return total_amount
+
     async def _place_grid_orders(self, side: PerpetualOrderSide, grid_level_list: List[GridLevel]) -> None:
         """
         在指定网格层级列表上放置订单
@@ -317,14 +338,13 @@ class PerpetualOrderManager:
         order_requests = []
         order_grid_map = {}
         for grid_level in grid_level_list:
-            if self.grid_manager.can_place_order(grid_level, side):
-                client_order_id, order_request = self._create_order_request(grid_level, 1.0, side)
-                order_requests.append(order_request)
-                order_grid_map[client_order_id] = grid_level
-                self.logger.info(
-                    f"Placing {'buy' if side == PerpetualOrderSide.BUY_OPEN else 'sell'} limit order {client_order_id} "
-                    f"at grid level {grid_level} for {self.trading_pair}."
-                )
+            client_order_id, order_request = await self._create_order_request(grid_level, side)
+            order_requests.append(order_request)
+            order_grid_map[client_order_id] = grid_level
+            self.logger.info(
+                f"Placing {'buy' if side == PerpetualOrderSide.BUY_OPEN else 'sell'} limit order {client_order_id} "
+                f"at grid level {grid_level} for {self.trading_pair}."
+            )
 
         if len(order_requests) > 0:
             perpetual_orders = await self.order_executor.execute_limit_orders(self.trading_pair, order_requests)
@@ -337,6 +357,7 @@ class PerpetualOrderManager:
                     f"Placed {'buy' if side == PerpetualOrderSide.BUY_OPEN else 'sell'} limit order {order.client_order_id()} "
                     f"at grid level {corresponding_grid_level} for {self.trading_pair}."
                 )
+
     async def initialize_grid_orders(self, current_price: float):
         """初始化网格订单"""
         sell_price_list, buy_price_list = self.grid_manager.get_candidate_prices(current_price)

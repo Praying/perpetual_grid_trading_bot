@@ -164,11 +164,39 @@ class PerpetualOrderExecutor:
         self.trading_mode = trading_mode
         self.max_retries = max_retries
         self.retry_delay = retry_delay
+
         
         # 确保交易所支持永续合约
         if not hasattr(self.exchange, 'has') or not self.exchange.has.get('future'):
             self.logger.error(f"交易所 {self.exchange.id} 不支持永续合约交易")
             raise ValueError(f"交易所 {self.exchange.id} 不支持永续合约交易")
+
+    async def amount_precision(self, symbol: str) -> Optional[float]:
+        markets = await self.exchange.load_markets()
+        if symbol in markets:
+            market = markets[symbol]
+            amount_precision = float(market['precision']['amount'])
+            return amount_precision
+        else:
+            return None
+
+    async def price_precision(self, symbol: str) -> Optional[float]:
+        markets = await self.exchange.load_markets()
+        if symbol in markets:
+            market = markets[symbol]
+            price_precision = float(market['precision']['price'])
+            return price_precision
+        else:
+            return None
+
+    async def contract_size(self, symbol: str) -> Optional[float]:
+        markets = await self.exchange.load_markets()
+        if symbol in markets:
+            market = markets[symbol]
+            contract_size_precision = float(market['contractSize'])
+            return contract_size_precision
+        else:
+            return None
 
     async def execute_limit_orders(self, symbol: str, order_requests: List[OrderRequest]) -> List[PerpetualOrder]:
         self.logger.info("批量执行限价单")
